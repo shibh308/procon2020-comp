@@ -1,7 +1,6 @@
-use druid::{Data, WidgetExt};
+use druid::Data;
 use rand;
 use rand::Rng;
-use std::borrow::BorrowMut;
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Point {
@@ -22,9 +21,15 @@ impl Score {
 }
 
 #[derive(Copy, Clone, PartialEq)]
-struct Tile {
+pub struct Tile {
     state: u8,
     point: i8,
+}
+
+impl Tile {
+    pub fn get_row_state(&self) -> u8 {
+        self.state
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -73,5 +78,11 @@ impl Field {
     }
     pub fn height(&self) -> usize {
         self.tiles.get(0).unwrap().len()
+    }
+    pub fn get_tile(&self, i: usize, j: usize) -> Tile {
+        self.tiles[i][j]
+    }
+    pub fn get_agent_count(&self) -> usize {
+        self.agents[0].len()
     }
 }
