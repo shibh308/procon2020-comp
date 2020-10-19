@@ -1,7 +1,7 @@
 use druid::widget::Flex;
 use druid::{
-    BoxConstraints, Color, KeyCode, LayoutCtx, LifeCycle, LifeCycleCtx, MouseButton, PaintCtx,
-    Rect, Size, UpdateCtx, Widget, WidgetExt,
+    BoxConstraints, Color, LayoutCtx, LifeCycle, LifeCycleCtx, MouseButton, PaintCtx, Rect, Size,
+    UpdateCtx, Widget, WidgetExt,
 };
 use druid::{Data, RenderContext};
 use druid::{Env, Event, EventCtx};
@@ -84,10 +84,9 @@ impl GameWidget {
 }
 
 impl Widget<AppData> for GameWidget {
-    fn event(&mut self, event_ctx: &mut EventCtx, event: &Event, data: &mut AppData, _env: &Env) {
+    fn event(&mut self, _event_ctx: &mut EventCtx, event: &Event, data: &mut AppData, _env: &Env) {
         match event {
             Event::MouseDown(e) => {
-                println!("mousedown");
                 if let Some(pos) = self.calc_pos(e.pos, data.simulator.get_field()) {
                     let state = match e.button {
                         MouseButton::Left => Some(field::State::Wall(false)),
@@ -99,7 +98,7 @@ impl Widget<AppData> for GameWidget {
                         data.simulator
                             .get_mut_field()
                             .set_state(pos.usize(), raw_state);
-                        data.simulator.calc_region();
+                        data.simulator.get_mut_field().update_region();
                     }
                 }
             }

@@ -4,13 +4,13 @@ use rand::Rng;
 use std::collections::VecDeque;
 use std::ops::Add;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Point {
     pub x: i8,
     pub y: i8,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct PointUsize {
     pub x: usize,
     pub y: usize,
@@ -179,7 +179,7 @@ impl Field {
         }
     }
 
-    pub fn calc_region(&self, side: bool) -> Vec<Vec<usize>> {
+    fn calc_region(&self, side: bool) -> Vec<Vec<usize>> {
         let unk = self.width() * self.height();
         let mut elm = vec![vec![unk; self.height()]; self.width()];
         let mut cnt = 0;
