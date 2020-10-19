@@ -78,15 +78,17 @@ pub struct Tile {
 impl State {
     pub fn is_wall(&self) -> bool {
         if let State::Wall(_) = self {
-            return true;
+            true
+        } else {
+            false
         }
-        false
     }
     pub fn is_position(&self) -> bool {
         if let State::Position(_) = self {
-            return true;
+            true
+        } else {
+            false
         }
-        false
     }
 }
 
@@ -184,7 +186,7 @@ impl Field {
         let mut siz = Vec::new();
         for i in 0..self.width() {
             for j in 0..self.height() {
-                if let State::Position(cmp_side) = self.tile(PointUsize::new(i, j)).state {
+                if let State::Wall(cmp_side) = self.tile(PointUsize::new(i, j)).state {
                     if side == cmp_side {
                         continue;
                     }
@@ -192,9 +194,11 @@ impl Field {
                 if elm[i][j] != unk {
                     continue;
                 }
+                elm[i][j] = cnt;
                 let mut elm_cnt = 0_usize;
                 let mut que = VecDeque::new();
                 que.push_back(PointUsize::new(i, j));
+                let mut out_flag = false;
                 while !que.is_empty() {
                     elm_cnt += 1;
                     let top = que.front().unwrap().clone();
@@ -206,10 +210,11 @@ impl Field {
                         Point::new(-1, 0),
                     ] {
                         if !self.inside(top.normal() + diff) {
+                            out_flag = true;
                             continue;
                         }
                         let nex = (top.normal() + diff).usize();
-                        if let State::Position(cmp_side) = self.tile(nex).state {
+                        if let State::Wall(cmp_side) = self.tile(nex).state {
                             if side == cmp_side {
                                 continue;
                             }
@@ -221,7 +226,8 @@ impl Field {
                         que.push_back(nex);
                     }
                 }
-                siz.push(elm_cnt);
+                siz.push(if out_flag { unk } else { elm_cnt });
+                cnt += 1;
             }
         }
         elm.iter()

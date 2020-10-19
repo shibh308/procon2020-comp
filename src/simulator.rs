@@ -31,6 +31,12 @@ impl Simulator {
     pub fn get_field(&self) -> &field::Field {
         &self.field
     }
+    pub fn get_mut_field(&mut self) -> &mut field::Field {
+        &mut self.field
+    }
+    pub fn calc_region(&mut self) {
+        self.field.update_region();
+    }
     pub fn change_turn(&mut self) {
         self.field.update_region();
         self.acts = vec![vec![Act::StayAct; self.field.agent_count()]; 2]
