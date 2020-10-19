@@ -1,11 +1,53 @@
 use druid::Data;
 use rand;
 use rand::Rng;
+use std::collections::VecDeque;
+use std::ops::Add;
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Point {
-    x: usize,
-    y: usize,
+    pub x: i8,
+    pub y: i8,
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub struct PointUsize {
+    pub x: usize,
+    pub y: usize,
+}
+
+impl Point {
+    pub fn new(x: i8, y: i8) -> Point {
+        Point { x, y }
+    }
+    pub fn usize(&self) -> PointUsize {
+        PointUsize {
+            x: self.x as usize,
+            y: self.y as usize,
+        }
+    }
+    pub fn neighbor(&self, other: Point) -> bool {
+        (self.x - other.x).abs().max((self.y - other.y).abs()) <= 1
+    }
+}
+
+impl Add for Point {
+    type Output = Point;
+    fn add(self, other: Point) -> Point {
+        Point::new(self.x + other.x, self.y + other.y)
+    }
+}
+
+impl PointUsize {
+    pub fn new(x: usize, y: usize) -> PointUsize {
+        PointUsize { x, y }
+    }
+    pub fn normal(&self) -> Point {
+        Point {
+            x: self.x as i8,
+            y: self.y as i8,
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -21,21 +63,43 @@ impl Score {
 }
 
 #[derive(Copy, Clone, PartialEq)]
+pub enum State {
+    Neutral,
+    Position(bool),
+    Wall(bool),
+}
+
+#[derive(Copy, Clone, PartialEq)]
 pub struct Tile {
-    state: u8,
+    state: State,
     point: i8,
 }
 
+impl State {
+    pub fn is_wall(&self) -> bool {
+        if let State::Wall(_) = self {
+            return true;
+        }
+        false
+    }
+    pub fn is_position(&self) -> bool {
+        if let State::Position(_) = self {
+            return true;
+        }
+        false
+    }
+}
+
 impl Tile {
-    pub fn get_row_state(&self) -> u8 {
+    pub fn state(&self) -> State {
         self.state
     }
 }
 
 #[derive(Clone, PartialEq)]
 pub struct Field {
-    now_turn: i8,
-    final_turn: i8,
+    now_turn: u8,
+    final_turn: u8,
     tiles: Vec<Vec<Tile>>,
     agents: Vec<Vec<Option<Point>>>,
     scores: Vec<Score>,
@@ -48,9 +112,8 @@ impl Data for Field {
 }
 
 impl Field {
-    pub fn make(width: usize, height: usize) -> Field {
+    pub fn new(width: usize, height: usize) -> Field {
         let mut rng = rand::thread_rng();
-
         let field = Field {
             now_turn: 0,
             final_turn: 0,
@@ -58,7 +121,7 @@ impl Field {
                 .map(|x| {
                     (0..height)
                         .map(|y| Tile {
-                            state: 0,
+                            state: State::Neutral,
                             point: rng.gen_range(-16, 17),
                         })
                         .collect()
@@ -70,7 +133,7 @@ impl Field {
         field
     }
     fn read_field(id: &str) -> Field {
-        Field::make(16, 16)
+        Field::new(16, 16)
     }
     fn calc_score(&mut self) {}
     pub fn width(&self) -> usize {
@@ -79,10 +142,94 @@ impl Field {
     pub fn height(&self) -> usize {
         self.tiles.get(0).unwrap().len()
     }
-    pub fn get_tile(&self, i: usize, j: usize) -> Tile {
-        self.tiles[i][j]
-    }
-    pub fn get_agent_count(&self) -> usize {
+    pub fn agent_count(&self) -> usize {
         self.agents[0].len()
+    }
+    pub fn tile(&self, pos: PointUsize) -> Tile {
+        self.tiles[pos.x][pos.y]
+    }
+    pub fn agent(&self, side: bool, id: usize) -> Option<Point> {
+        self.agents[side as usize][id]
+    }
+    pub fn set_state(&mut self, pos: PointUsize, state: State) {
+        self.tiles[pos.x][pos.y].state = state
+    }
+    pub fn set_agent(&mut self, side: bool, id: usize, pos: Option<Point>) {
+        self.agents[side as usize][id] = pos
+    }
+    pub fn inside(&self, pos: Point) -> bool {
+        let u_pos = pos.usize();
+        0 <= pos.x.min(pos.y) && u_pos.x < self.width() && u_pos.y < self.height()
+    }
+    pub fn update_region(&mut self) {
+        let elm = vec![self.calc_region(false), self.calc_region(true)];
+        for i in 0..self.width() {
+            for j in 0..self.height() {
+                if self.tile(PointUsize::new(i, j)).state.is_wall() {
+                    continue;
+                }
+                if elm[0][i][j] < elm[1][i][j] {
+                    self.set_state(PointUsize::new(i, j), State::Position(false));
+                } else if elm[0][i][j] > elm[1][i][j] {
+                    self.set_state(PointUsize::new(i, j), State::Position(true));
+                }
+            }
+        }
+    }
+
+    pub fn calc_region(&self, side: bool) -> Vec<Vec<usize>> {
+        let unk = self.width() * self.height();
+        let mut elm = vec![vec![unk; self.height()]; self.width()];
+        let mut cnt = 0;
+        let mut siz = Vec::new();
+        for i in 0..self.width() {
+            for j in 0..self.height() {
+                if let State::Position(cmp_side) = self.tile(PointUsize::new(i, j)).state {
+                    if side == cmp_side {
+                        continue;
+                    }
+                }
+                if elm[i][j] != unk {
+                    continue;
+                }
+                let mut elm_cnt = 0_usize;
+                let mut que = VecDeque::new();
+                que.push_back(PointUsize::new(i, j));
+                while !que.is_empty() {
+                    elm_cnt += 1;
+                    let top = que.front().unwrap().clone();
+                    que.pop_front();
+                    for diff in vec![
+                        Point::new(0, 1),
+                        Point::new(0, -1),
+                        Point::new(1, 0),
+                        Point::new(-1, 0),
+                    ] {
+                        if !self.inside(top.normal() + diff) {
+                            continue;
+                        }
+                        let nex = (top.normal() + diff).usize();
+                        if let State::Position(cmp_side) = self.tile(nex).state {
+                            if side == cmp_side {
+                                continue;
+                            }
+                        }
+                        if elm[nex.x][nex.y] != unk {
+                            continue;
+                        }
+                        elm[nex.x][nex.y] = cnt;
+                        que.push_back(nex);
+                    }
+                }
+                siz.push(elm_cnt);
+            }
+        }
+        elm.iter()
+            .map(|v| {
+                v.iter()
+                    .map(|c| if *c == unk { unk } else { siz[*c] })
+                    .collect()
+            })
+            .collect()
     }
 }

@@ -7,6 +7,7 @@ use druid::{Data, RenderContext};
 use druid::{Env, Event, EventCtx};
 
 use crate::field;
+use crate::field::PointUsize;
 use crate::simulator;
 
 const MARGIN: f64 = 0.15;
@@ -35,7 +36,11 @@ fn get_color(color_data: ColorData) -> &'static Color {
         ColorData::Bg => &BG_COLOR,
         ColorData::Grid => &GRID_COLOR,
         ColorData::Field => &FIELD_COLOR,
-        ColorData::Tile(tile) => &TILE_COLOR[tile.get_row_state() as usize],
+        ColorData::Tile(tile) => match tile.state() {
+            field::State::Neutral => &TILE_COLOR[0],
+            field::State::Wall(fl) => &TILE_COLOR[1 + fl as usize],
+            field::State::Position(fl) => &TILE_COLOR[3 + fl as usize],
+        },
     }
 }
 
@@ -102,7 +107,7 @@ impl Widget<AppData> for GameWidget {
         for i in 0..field.width() {
             for j in 0..field.height() {
                 let rect = calc_rect(i, j);
-                let tile = field.get_tile(i, j);
+                let tile = field.tile(PointUsize::new(i, j));
                 paint_ctx.paint_with_z_index(2, move |paint_ctx| {
                     paint_ctx.fill(rect, get_color(ColorData::Tile(tile)))
                 });
