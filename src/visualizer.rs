@@ -32,10 +32,8 @@ const AGENT_COLOR: [druid::Color; 2] = [
     druid::Color::rgba8(255, 0, 0, 100),
     druid::Color::rgba8(0, 0, 255, 100),
 ];
-const FONT_COLOR: [druid::Color; 4] = [
+const FONT_COLOR: [druid::Color; 2] = [
     druid::Color::rgba8(160, 160, 140, 180),
-    druid::Color::rgb8(255, 0, 0),
-    druid::Color::rgb8(0, 0, 255),
     druid::Color::rgba8(160, 160, 140, 220),
 ];
 
@@ -44,10 +42,9 @@ enum ColorData {
     Grid,
     Field,
     Point,
+    ScoreText,
     Agent(bool),
     Tile(field::Tile),
-    Score(bool),
-    ScoreText,
 }
 
 fn get_color(color_data: ColorData) -> &'static Color {
@@ -56,14 +53,13 @@ fn get_color(color_data: ColorData) -> &'static Color {
         ColorData::Grid => &GRID_COLOR,
         ColorData::Field => &FIELD_COLOR,
         ColorData::Point => &FONT_COLOR[0],
+        ColorData::ScoreText => &FONT_COLOR[1],
         ColorData::Tile(tile) => match tile.state() {
             field::State::Neutral => &TILE_COLOR[0],
             field::State::Wall(fl) => &TILE_COLOR[1 + fl as usize],
             field::State::Position(fl) => &TILE_COLOR[3 + fl as usize],
         },
         ColorData::Agent(side) => &AGENT_COLOR[side as usize],
-        ColorData::Score(side) => &FONT_COLOR[side as usize + 1],
-        ColorData::ScoreText => &FONT_COLOR[3],
     }
 }
 
@@ -275,7 +271,7 @@ impl Widget<AppData> for GameWidget {
                     paint_ctx.stroke(rect, get_color(ColorData::Grid), width)
                 });
                 let point_str = &tile.point().to_string();
-                let mut text = paint_ctx.render_ctx.text();
+                let text = paint_ctx.render_ctx.text();
                 let font = text
                     .new_font_by_name("Segoe UI", self.grid_size * FONT_SIZE)
                     .build()
@@ -334,7 +330,7 @@ impl Widget<AppData> for GameWidget {
         for side in vec![false, true] {
             let score = field.score(side);
             let score_str = &format!("{}+{}={}", score.tile(), score.region(), score.sum());
-            let mut text = paint_ctx.render_ctx.text();
+            let text = paint_ctx.render_ctx.text();
             let font = text
                 .new_font_by_name("Segoe UI", self.grid_size * FONT_SIZE)
                 .build()
@@ -352,7 +348,7 @@ impl Widget<AppData> for GameWidget {
             });
         }
         let turn_str = &format!("{}/{}", field.now_turn(), field.final_turn());
-        let mut text = paint_ctx.render_ctx.text();
+        let text = paint_ctx.render_ctx.text();
         let font = text
             .new_font_by_name("Segoe UI", self.grid_size * FONT_SIZE)
             .build()

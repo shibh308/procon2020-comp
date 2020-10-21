@@ -142,15 +142,15 @@ impl Field {
         let agent_count = if let Some(num) = agent_count_ {
             num
         } else {
-            rng.gen_range(12, 25)
+            rng.gen_range(6, 15)
         };
         let field = Field {
             now_turn: 0,
             final_turn: 50,
             tiles: (0..width)
-                .map(|x| {
+                .map(|_x| {
                     (0..height)
-                        .map(|y| Tile {
+                        .map(|_y| Tile {
                             state: State::Neutral,
                             point: rng.gen_range(-16, 17),
                         })
