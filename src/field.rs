@@ -123,11 +123,30 @@ impl Data for Field {
 }
 
 impl Field {
-    pub fn new(width: usize, height: usize) -> Field {
+    pub fn new(
+        width_: Option<usize>,
+        height_: Option<usize>,
+        agent_count_: Option<usize>,
+    ) -> Field {
         let mut rng = rand::thread_rng();
+        let width = if let Some(num) = width_ {
+            num
+        } else {
+            rng.gen_range(12, 25)
+        };
+        let height = if let Some(num) = height_ {
+            num
+        } else {
+            rng.gen_range(12, 25)
+        };
+        let agent_count = if let Some(num) = agent_count_ {
+            num
+        } else {
+            rng.gen_range(12, 25)
+        };
         let field = Field {
             now_turn: 0,
-            final_turn: 0,
+            final_turn: 50,
             tiles: (0..width)
                 .map(|x| {
                     (0..height)
@@ -138,13 +157,13 @@ impl Field {
                         .collect()
                 })
                 .collect(),
-            agents: vec![vec![None; 2]; 2],
+            agents: vec![vec![None; agent_count]; 2],
             scores: vec![Score { tile: 0, region: 0 }; 2],
         };
         field
     }
     fn read_field(id: &str) -> Field {
-        Field::new(16, 16)
+        Field::new(None, None, None)
     }
     pub fn width(&self) -> usize {
         self.tiles.len()
@@ -157,6 +176,12 @@ impl Field {
     }
     pub fn score(&self, side: bool) -> Score {
         self.scores[side as usize]
+    }
+    pub fn now_turn(&self) -> u8 {
+        self.now_turn
+    }
+    pub fn final_turn(&self) -> u8 {
+        self.final_turn
     }
     pub fn tile(&self, pos: PointUsize) -> Tile {
         self.tiles[pos.x][pos.y]
@@ -173,6 +198,10 @@ impl Field {
     pub fn inside(&self, pos: Point) -> bool {
         let u_pos = pos.usize();
         0 <= pos.x.min(pos.y) && u_pos.x < self.width() && u_pos.y < self.height()
+    }
+    pub fn update_turn(&mut self) {
+        assert_ne!(self.now_turn, self.final_turn);
+        self.now_turn += 1;
     }
     pub fn update_region(&mut self) {
         let elm = vec![self.calc_region(false), self.calc_region(true)];

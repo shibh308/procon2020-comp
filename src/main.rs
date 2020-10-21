@@ -9,7 +9,7 @@ fn main() {
     let main_window = WindowDesc::new(visualizer::ui_builder);
 
     let data = visualizer::AppData {
-        simulator: simulator::Simulator::make(field::Field::new(16, 12)),
+        simulator: simulator::Simulator::make(field::Field::new(None, None, None)),
     };
 
     AppLauncher::with_window(main_window)

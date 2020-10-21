@@ -57,6 +57,10 @@ impl Simulator {
         self.acts[side as usize][id] = act;
     }
     pub fn change_turn(&mut self) {
+        if self.field.now_turn() == self.field.final_turn() {
+            return;
+        }
+
         let mut pos_map = HashSet::new();
         let mut act_map: HashMap<field::Point, Vec<(bool, usize)>> = HashMap::new();
 
@@ -146,6 +150,7 @@ impl Simulator {
         }
         self.field.update_region();
         self.field.update_score();
+        self.field.update_turn();
         self.acts = vec![vec![Act::StayAct; self.field.agent_count()]; 2]
     }
 }

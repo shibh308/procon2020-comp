@@ -32,11 +32,11 @@ const AGENT_COLOR: [druid::Color; 2] = [
     druid::Color::rgba8(255, 0, 0, 100),
     druid::Color::rgba8(0, 0, 255, 100),
 ];
-const FONT_COLOR: [druid::Color; 3] = [
+const FONT_COLOR: [druid::Color; 4] = [
     druid::Color::rgba8(160, 160, 140, 180),
-    // TODO
     druid::Color::rgb8(255, 0, 0),
     druid::Color::rgb8(0, 0, 255),
+    druid::Color::rgba8(160, 160, 140, 220),
 ];
 
 enum ColorData {
@@ -47,6 +47,7 @@ enum ColorData {
     Agent(bool),
     Tile(field::Tile),
     Score(bool),
+    ScoreText,
 }
 
 fn get_color(color_data: ColorData) -> &'static Color {
@@ -62,6 +63,7 @@ fn get_color(color_data: ColorData) -> &'static Color {
         },
         ColorData::Agent(side) => &AGENT_COLOR[side as usize],
         ColorData::Score(side) => &FONT_COLOR[side as usize + 1],
+        ColorData::ScoreText => &FONT_COLOR[3],
     }
 }
 
@@ -104,7 +106,7 @@ impl GameWidget {
                 let center = self.size.width / 2.0;
                 let circle_center_x = center
                     + self.grid_size
-                        * ((field.width() / 2) as f64
+                        * ((field.width() as f64 / 2.0)
                             + 0.5
                             + (if id % 2 == 1 { 1.0 } else { 0.0 }))
                         * (if side { 1.0 } else { -1.0 });
@@ -349,6 +351,23 @@ impl Widget<AppData> for GameWidget {
                 paint_ctx.draw_text(&layout, pos, get_color(ColorData::Agent(side)));
             });
         }
+        let turn_str = &format!("{}/{}", field.now_turn(), field.final_turn());
+        let mut text = paint_ctx.render_ctx.text();
+        let font = text
+            .new_font_by_name("Segoe UI", self.grid_size * FONT_SIZE)
+            .build()
+            .expect("font not found");
+        let layout = text
+            .new_text_layout(&font, turn_str, self.grid_size * FONT_SIZE)
+            .build()
+            .expect("layout build failed");
+        let pos = druid::Point::new(
+            self.corner_x - self.grid_size * 2.0,
+            self.corner_y + self.grid_size * (field.height() as f64 - 1.4),
+        );
+        paint_ctx.paint_with_z_index(2, move |paint_ctx| {
+            paint_ctx.draw_text(&layout, pos, get_color(ColorData::ScoreText));
+        });
     }
 }
 
