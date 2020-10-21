@@ -50,9 +50,13 @@ impl Simulator {
     pub fn get_mut_field(&mut self) -> &mut field::Field {
         &mut self.field
     }
+    pub fn get_act(&self, side: bool, id: usize) -> Act {
+        self.acts[side as usize][id].clone()
+    }
+    pub fn set_act(&mut self, side: bool, id: usize, act: Act) {
+        self.acts[side as usize][id] = act;
+    }
     pub fn change_turn(&mut self) {
-        self.field.update_region();
-
         let mut pos_map = HashSet::new();
         let mut act_map: HashMap<field::Point, Vec<(bool, usize)>> = HashMap::new();
 
@@ -67,7 +71,9 @@ impl Simulator {
                         {
                             let state = self.field.tile(act.pos().unwrap().usize()).state();
                             match act {
-                                Act::MoveAct(_) if !state.is_wall() => act.clone(),
+                                Act::MoveAct(_) if state != field::State::Wall(!side) => {
+                                    act.clone()
+                                }
                                 Act::RemoveAct(_) if state.is_wall() => act.clone(),
                                 _ => Act::StayAct,
                             }
@@ -76,7 +82,14 @@ impl Simulator {
                         }
                     }
                     None => match act {
-                        Act::PutAct(_) => act.clone(),
+                        Act::PutAct(_) => {
+                            let state = self.field.tile(act.pos().unwrap().usize()).state();
+                            if state != field::State::Wall(!side) {
+                                act.clone()
+                            } else {
+                                Act::StayAct
+                            }
+                        }
                         _ => Act::StayAct,
                     },
                 };
@@ -104,6 +117,9 @@ impl Simulator {
             let k = que.front().unwrap().clone();
             que.pop_front();
             if let Some(out_moves) = act_map.get(&k) {
+                if out_moves.len() >= 2 {
+                    continue;
+                }
                 for (side, idx) in out_moves {
                     let before_pos = self.field.agent(*side, *idx).clone();
                     let act = &self.acts[*side as usize][*idx];
@@ -128,7 +144,8 @@ impl Simulator {
                 }
             }
         }
-
+        self.field.update_region();
+        self.field.update_score();
         self.acts = vec![vec![Act::StayAct; self.field.agent_count()]; 2]
     }
 }

@@ -57,7 +57,13 @@ pub struct Score {
 }
 
 impl Score {
-    fn sum(&self) -> i16 {
+    pub fn tile(&self) -> i16 {
+        self.tile
+    }
+    pub fn region(&self) -> i16 {
+        self.region
+    }
+    pub fn sum(&self) -> i16 {
         self.tile + self.region
     }
 }
@@ -95,6 +101,9 @@ impl State {
 impl Tile {
     pub fn state(&self) -> State {
         self.state
+    }
+    pub fn point(&self) -> i8 {
+        self.point
     }
 }
 
@@ -137,7 +146,6 @@ impl Field {
     fn read_field(id: &str) -> Field {
         Field::new(16, 16)
     }
-    fn calc_score(&mut self) {}
     pub fn width(&self) -> usize {
         self.tiles.len()
     }
@@ -146,6 +154,9 @@ impl Field {
     }
     pub fn agent_count(&self) -> usize {
         self.agents[0].len()
+    }
+    pub fn score(&self, side: bool) -> Score {
+        self.scores[side as usize]
     }
     pub fn tile(&self, pos: PointUsize) -> Tile {
         self.tiles[pos.x][pos.y]
@@ -178,7 +189,30 @@ impl Field {
             }
         }
     }
-
+    pub fn update_score(&mut self) {
+        let mut tile_point: [i16; 2] = [0, 0];
+        let mut region_point: [i16; 2] = [0, 0];
+        for i in 0..self.width() {
+            for j in 0..self.height() {
+                let tile = self.tile(PointUsize::new(i, j));
+                match tile.state {
+                    State::Wall(side) => tile_point[side as usize] += tile.point as i16,
+                    State::Position(side) => region_point[side as usize] += tile.point.abs() as i16,
+                    _ => {}
+                }
+            }
+        }
+        self.scores = vec![
+            Score {
+                tile: tile_point[0],
+                region: region_point[0],
+            },
+            Score {
+                tile: tile_point[1],
+                region: region_point[1],
+            },
+        ];
+    }
     fn calc_region(&self, side: bool) -> Vec<Vec<usize>> {
         let unk = self.width() * self.height();
         let mut elm = vec![vec![unk; self.height()]; self.width()];
