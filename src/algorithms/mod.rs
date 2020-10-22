@@ -1,5 +1,5 @@
 pub mod base;
-pub mod simple_dp;
+pub mod greedy_select;
 
 pub use base::Solver;
-pub use simple_dp::SimpleDP;
+pub use greedy_select::GreedySelect;

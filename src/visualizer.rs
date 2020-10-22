@@ -1,5 +1,4 @@
 use druid::kurbo::Circle;
-use druid::widget::{Button, CrossAxisAlignment};
 use druid::{
     BoxConstraints, Color, LayoutCtx, LifeCycle, LifeCycleCtx, MouseButton, MouseEvent, PaintCtx,
     Rect, Size, UpdateCtx, Widget, WidgetExt,
@@ -75,11 +74,14 @@ pub struct AppData {
     pub simulator: simulator::Simulator,
 }
 
-pub fn make_button<T: algorithms::Solver>(flex: &mut Flex<AppData>, text: &str, side: bool) {
+pub fn make_button<T: algorithms::Solver>(flex: &mut Flex<AppData>, side: bool) {
+    let typename = std::any::type_name::<T>();
+    let pos = typename.to_string().rfind("::");
+    let text = &typename[(if pos.is_none() { 0 } else { pos.unwrap() + 2 })..];
     flex.add_flex_child(
         druid::widget::Button::new(text).on_click(move |_ctx, data: &mut AppData, _env| {
             let field = data.simulator.get_field();
-            let res = T::solve(field);
+            let res = T::solve(side, field);
             for id in 0..field.agent_count() {
                 data.simulator.set_act(side.clone(), id, res[id].clone());
             }
@@ -90,7 +92,7 @@ pub fn make_button<T: algorithms::Solver>(flex: &mut Flex<AppData>, text: &str, 
 
 pub fn make_side_ui(side: bool) -> impl Widget<AppData> {
     let mut flex = Flex::column().must_fill_main_axis(true);
-    make_button::<algorithms::SimpleDP>(&mut flex, "SimpleDP", side);
+    make_button::<algorithms::GreedySelect>(&mut flex, side);
     flex.padding(10.).center()
 }
 

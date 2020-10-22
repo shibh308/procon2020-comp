@@ -2,7 +2,7 @@ use crate::field;
 use druid::Data;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub enum Act {
     StayAct,
     PutAct(field::Point),

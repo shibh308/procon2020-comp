@@ -1,6 +1,5 @@
-use druid::Widget;
+use druid::AppLauncher;
 use druid::WindowDesc;
-use druid::{AppLauncher, WidgetExt};
 
 use procon31_comp::field;
 use procon31_comp::simulator;
