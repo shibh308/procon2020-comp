@@ -1,5 +1,5 @@
 use druid::kurbo::Circle;
-use druid::widget::Flex;
+use druid::widget::{Button, CrossAxisAlignment};
 use druid::{
     BoxConstraints, Color, LayoutCtx, LifeCycle, LifeCycleCtx, MouseButton, MouseEvent, PaintCtx,
     Rect, Size, UpdateCtx, Widget, WidgetExt,
@@ -7,9 +7,11 @@ use druid::{
 use druid::{Data, RenderContext};
 use druid::{Env, Event, EventCtx};
 
+use crate::algorithms;
 use crate::field;
 use crate::simulator;
 use crate::simulator::Simulator;
+use druid::widget::Flex;
 use piet::{FontBuilder, Text, TextLayoutBuilder};
 
 const MARGIN: f64 = 0.15;
@@ -73,7 +75,36 @@ pub struct AppData {
     pub simulator: simulator::Simulator,
 }
 
-struct GameWidget {
+pub fn make_button<T: algorithms::Solver>(flex: &mut Flex<AppData>, text: &str, side: bool) {
+    flex.add_flex_child(
+        druid::widget::Button::new(text).on_click(move |_ctx, data: &mut AppData, _env| {
+            let field = data.simulator.get_field();
+            let res = T::solve(field);
+            for id in 0..field.agent_count() {
+                data.simulator.set_act(side.clone(), id, res[id].clone());
+            }
+        }),
+        1.0,
+    );
+}
+
+pub fn make_side_ui(side: bool) -> impl Widget<AppData> {
+    let mut flex = Flex::column().must_fill_main_axis(true);
+    make_button::<algorithms::SimpleDP>(&mut flex, "SimpleDP", side);
+    flex.padding(10.).center()
+}
+
+pub fn ui_builder() -> impl Widget<AppData> {
+    let mut flex = Flex::row();
+    flex.add_flex_child(make_side_ui(false), 0.2);
+    flex.add_spacer(10.);
+    flex.add_flex_child(GameWidget::new(), 3.0);
+    flex.add_spacer(10.);
+    flex.add_flex_child(make_side_ui(true), 0.2);
+    flex.background(get_color(ColorData::Bg).clone())
+}
+
+pub struct GameWidget {
     size: Size,
     grid_size: f64,
     corner_x: f64,
@@ -82,6 +113,15 @@ struct GameWidget {
 }
 
 impl GameWidget {
+    pub fn new() -> GameWidget {
+        GameWidget {
+            size: Default::default(),
+            grid_size: 0.0,
+            corner_x: 0.0,
+            corner_y: 0.0,
+            selected: None,
+        }
+    }
     fn update(&mut self, widget_size: Size, field: &field::Field) {
         self.size = widget_size;
         self.grid_size = ((self.size.width * (1.0 - MARGIN)) / field.width() as f64)
@@ -365,19 +405,4 @@ impl Widget<AppData> for GameWidget {
             paint_ctx.draw_text(&layout, pos, get_color(ColorData::ScoreText));
         });
     }
-}
-
-pub fn ui_builder() -> impl Widget<AppData> {
-    Flex::column()
-        .with_flex_child(
-            GameWidget {
-                size: Default::default(),
-                grid_size: 0.0,
-                corner_x: 0.0,
-                corner_y: 0.0,
-                selected: None,
-            },
-            1.0,
-        )
-        .background(get_color(ColorData::Bg).clone())
 }
