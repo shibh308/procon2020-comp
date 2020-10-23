@@ -19,7 +19,6 @@ pub trait EachEvalSolver {
 
 pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T, stay_val: f64) -> Vec<Act> {
     let field = solver.field();
-    let side = solver.side();
     let mut eval_scores = Vec::new();
     for id in 0..field.agent_count() {
         let mut ev = HashMap::new();
@@ -194,20 +193,24 @@ fn primal_dual(acts: Vec<HashMap<Act, f64>>) -> Vec<Act> {
     acts
 }
 
+pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {
+    (-1..2)
+        .fold(Vec::new(), |v, x| {
+            v.into_iter()
+                .chain((-1..2).map(|y| Point::new(x as i8, y as i8)))
+                .collect()
+        })
+        .iter()
+        .map(|p| (pos + *p))
+        .filter(|p| field.inside(*p))
+        .collect()
+}
+
 pub fn make_acts(side: bool, id: usize, field: &Field) -> Vec<Act> {
     match field.agent(side, id) {
         Some(pos) => {
             let mut cand = Vec::new();
-            let moves: Vec<Point> = (-1..2)
-                .fold(Vec::new(), |v, x| {
-                    v.into_iter()
-                        .chain((-1..2).map(|y| Point::new(x as i8, y as i8)))
-                        .collect()
-                })
-                .iter()
-                .map(|p| (pos + *p))
-                .filter(|p| field.inside(*p))
-                .collect();
+            let moves: Vec<Point> = make_neighbors(pos, field);
             for mov in moves {
                 match field.tile(mov.usize()).state() {
                     field::State::Neutral | field::State::Position(_) => {
