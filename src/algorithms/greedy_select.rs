@@ -21,7 +21,7 @@ impl<'a> base::Solver<'a> for GreedySelect<'a> {
         self.side
     }
     fn solve(&mut self) -> Vec<Act> {
-        base::solve(self, -17.0)
+        base::solve(self)
     }
 }
 

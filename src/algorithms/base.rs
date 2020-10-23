@@ -18,7 +18,7 @@ pub trait EachEvalSolver {
     fn eval(&self, id: usize, act: Act) -> Option<f64>;
 }
 
-pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T, stay_val: f64) -> Vec<Act> {
+pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T) -> Vec<Act> {
     let field = solver.field();
     let mut eval_scores = Vec::new();
     for id in 0..field.agent_count() {

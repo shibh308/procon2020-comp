@@ -11,10 +11,12 @@ pub struct SimpleDp<'a> {
     field: &'a Field,
     side: bool,
     data: HashMap<Point, f64>,
+    agent_set: HashSet<Point>,
 }
 
-const TURN: u8 = 7;
-const PER: f64 = 0.3;
+const TURN: u8 = 5;
+const PER: f64 = 0.7;
+const CONFLICT: f64 = 0.3;
 
 impl<'a> base::Solver<'a> for SimpleDp<'a> {
     fn new(side: bool, field: &'a Field) -> SimpleDp<'a> {
@@ -22,6 +24,7 @@ impl<'a> base::Solver<'a> for SimpleDp<'a> {
             field,
             side,
             data: HashMap::new(),
+            agent_set: HashSet::new(),
         }
     }
     fn field(&self) -> &Field {
@@ -32,7 +35,12 @@ impl<'a> base::Solver<'a> for SimpleDp<'a> {
     }
     fn solve(&mut self) -> Vec<Act> {
         self.calc_dp();
-        base::solve(self, 0.0)
+        for id in 0..self.field.agent_count() {
+            if let Some(pos) = self.field.agent(!self.side, id) {
+                self.agent_set.insert(pos);
+            }
+        }
+        base::solve(self)
     }
 }
 
@@ -167,9 +175,6 @@ impl SimpleDp<'_> {
                 val.score = val.score.max(now_state.score);
             }
         }
-        for (k, v) in &self.data {
-            println!("({},{}): {}", k.x, k.y, v);
-        }
     }
 }
 
@@ -186,7 +191,13 @@ impl base::EachEvalSolver for SimpleDp<'_> {
             }
             Act::RemoveAct(pos) => {
                 if self.field.tile(pos.usize()).state() == field::State::Wall(!self.side) {
-                    self.data.get(&pos).cloned()
+                    self.data.get(&pos).map(|x| {
+                        x * (if self.agent_set.contains(&pos) {
+                            CONFLICT
+                        } else {
+                            1.0
+                        })
+                    })
                 } else {
                     None
                 }
