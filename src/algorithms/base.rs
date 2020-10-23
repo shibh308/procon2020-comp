@@ -14,7 +14,7 @@ pub trait EachEvalSolver {
     fn eval(side: bool, id: usize, act: Act, field: &Field) -> Option<f64>;
 }
 
-pub fn solve<T: EachEvalSolver>(side: bool, field: &Field) -> Vec<Act> {
+pub fn solve<T: EachEvalSolver>(side: bool, field: &Field, stay_val: f64) -> Vec<Act> {
     let mut eval_scores = Vec::new();
     for id in 0..field.agent_count() {
         let mut ev = HashMap::new();
@@ -24,7 +24,7 @@ pub fn solve<T: EachEvalSolver>(side: bool, field: &Field) -> Vec<Act> {
                 ev.insert(act.clone(), score);
             }
         }
-        ev.insert(Act::StayAct, 0.0);
+        ev.insert(Act::StayAct, stay_val);
         eval_scores.push(ev);
     }
     primal_dual(eval_scores)

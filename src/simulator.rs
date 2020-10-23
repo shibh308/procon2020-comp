@@ -29,6 +29,7 @@ impl Act {
 pub struct Simulator {
     field: field::Field,
     acts: Vec<Vec<Act>>,
+    act_flag: [bool; 2],
 }
 
 impl Data for Simulator {
@@ -42,6 +43,7 @@ impl Simulator {
         Simulator {
             field: field.clone(),
             acts: vec![vec![Act::StayAct; field.agent_count()]; 2],
+            act_flag: [false, false],
         }
     }
     pub fn get_field(&self) -> &field::Field {
@@ -55,9 +57,13 @@ impl Simulator {
     }
     pub fn set_act(&mut self, side: bool, id: usize, act: Act) {
         self.acts[side as usize][id] = act;
+        self.act_flag[side as usize] = true;
     }
     pub fn change_turn(&mut self) {
-        if self.field.now_turn() == self.field.final_turn() {
+        if self.field.now_turn() == self.field.final_turn()
+            || !self.act_flag[0]
+            || !self.act_flag[1]
+        {
             return;
         }
 
@@ -151,6 +157,8 @@ impl Simulator {
         self.field.update_region();
         self.field.update_score();
         self.field.update_turn();
-        self.acts = vec![vec![Act::StayAct; self.field.agent_count()]; 2]
+        self.acts = vec![vec![Act::StayAct; self.field.agent_count()]; 2];
+        self.act_flag[0] = false;
+        self.act_flag[1] = false;
     }
 }

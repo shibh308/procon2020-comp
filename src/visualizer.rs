@@ -247,14 +247,15 @@ impl Widget<AppData> for GameWidget {
                 }
                 Some(ClickedElement::Agent((side, id))) => match self.selected {
                     Some((selected_side, selected_id)) => {
-                        let tile_pos = data.simulator.get_field().agent(side, id);
-                        self.event_set_act(
-                            e,
-                            &mut data.simulator,
-                            selected_side,
-                            selected_id,
-                            tile_pos.unwrap(),
-                        );
+                        if let Some(tile_pos) = data.simulator.get_field().agent(side, id) {
+                            self.event_set_act(
+                                e,
+                                &mut data.simulator,
+                                selected_side,
+                                selected_id,
+                                tile_pos,
+                            );
+                        }
                     }
                     None => {
                         self.selected = Some((side, id));

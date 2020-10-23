@@ -9,7 +9,7 @@ pub struct GreedySelect {}
 
 impl base::Solver for GreedySelect {
     fn solve(side: bool, field: &Field) -> Vec<Act> {
-        base::solve::<GreedySelect>(side, field)
+        base::solve::<GreedySelect>(side, field, -17.0)
     }
 }
 
