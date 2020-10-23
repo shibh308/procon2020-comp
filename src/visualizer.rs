@@ -7,6 +7,7 @@ use druid::{Data, RenderContext};
 use druid::{Env, Event, EventCtx};
 
 use crate::algorithms;
+use crate::algorithms::Solver;
 use crate::field;
 use crate::simulator;
 use crate::simulator::Simulator;
@@ -74,25 +75,32 @@ pub struct AppData {
     pub simulator: simulator::Simulator,
 }
 
-pub fn make_button<T: algorithms::Solver>(flex: &mut Flex<AppData>, side: bool) {
-    let typename = std::any::type_name::<T>();
-    let pos = typename.to_string().rfind("::");
-    let text = &typename[(if pos.is_none() { 0 } else { pos.unwrap() + 2 })..];
-    flex.add_flex_child(
-        druid::widget::Button::new(text).on_click(move |_ctx, data: &mut AppData, _env| {
-            let field = data.simulator.get_field();
-            let res = T::solve(side, field);
-            for id in 0..field.agent_count() {
-                data.simulator.set_act(side.clone(), id, res[id].clone());
-            }
-        }),
-        1.0,
-    );
+macro_rules! make_button {
+    ($f: ident) => {
+        (|flex: &mut Flex<_>, side: bool| {
+            let typename = std::any::type_name::<algorithms::$f>();
+            let pos = typename.to_string().rfind("::");
+            let text = &typename[(if pos.is_none() { 0 } else { pos.unwrap() + 2 })..];
+            flex.add_flex_child(
+                druid::widget::Button::new(text).on_click(move |_ctx, data: &mut AppData, _env| {
+                    let field: &field::Field = data.simulator.get_field();
+                    let mut solver = algorithms::$f::new(side, field);
+                    let res = solver.solve();
+                    for id in 0..field.agent_count() {
+                        data.simulator.set_act(side, id, res[id].clone());
+                    }
+                }),
+                1.0,
+            );
+            flex.add_spacer(10.);
+        })
+    };
 }
 
-pub fn make_side_ui(side: bool) -> impl Widget<AppData> {
+fn make_side_ui(side: bool) -> impl Widget<AppData> {
     let mut flex = Flex::column().must_fill_main_axis(true);
-    make_button::<algorithms::GreedySelect>(&mut flex, side);
+    make_button!(GreedySelect)(&mut flex, side);
+    make_button!(SimpleDp)(&mut flex, side);
     flex.padding(10.).center()
 }
 

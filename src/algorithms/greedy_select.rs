@@ -5,16 +5,28 @@ use crate::simulator;
 use field::Field;
 use simulator::Act;
 
-pub struct GreedySelect {}
+pub struct GreedySelect<'a> {
+    field: &'a Field,
+    side: bool,
+}
 
-impl base::Solver for GreedySelect {
-    fn solve(side: bool, field: &Field) -> Vec<Act> {
-        base::solve::<GreedySelect>(side, field, -17.0)
+impl<'a> base::Solver<'a> for GreedySelect<'a> {
+    fn new(side: bool, field: &'a Field) -> GreedySelect<'a> {
+        GreedySelect { field, side }
+    }
+    fn field(&self) -> &Field {
+        self.field
+    }
+    fn side(&self) -> bool {
+        self.side
+    }
+    fn solve(&mut self) -> Vec<Act> {
+        base::solve(self, -17.0)
     }
 }
 
-impl base::EachEvalSolver for GreedySelect {
-    fn eval(side: bool, _id: usize, act: Act, field: &Field) -> Option<f64> {
-        base::point(side, act, field).map(|x| x as f64)
+impl<'a> base::EachEvalSolver for GreedySelect<'a> {
+    fn eval(&self, _id: usize, act: Act) -> Option<f64> {
+        base::point(self.side, act, self.field).map(|x| x as f64)
     }
 }

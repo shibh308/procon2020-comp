@@ -6,21 +6,26 @@ use simulator::Act;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
-pub trait Solver {
-    fn solve(side: bool, field: &Field) -> Vec<Act>;
+pub trait Solver<'a> {
+    fn new(side: bool, field: &'a Field) -> Self;
+    fn field(&self) -> &Field;
+    fn side(&self) -> bool;
+    fn solve(&mut self) -> Vec<Act>;
 }
 
 pub trait EachEvalSolver {
-    fn eval(side: bool, id: usize, act: Act, field: &Field) -> Option<f64>;
+    fn eval(&self, id: usize, act: Act) -> Option<f64>;
 }
 
-pub fn solve<T: EachEvalSolver>(side: bool, field: &Field, stay_val: f64) -> Vec<Act> {
+pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T, stay_val: f64) -> Vec<Act> {
+    let field = solver.field();
+    let side = solver.side();
     let mut eval_scores = Vec::new();
     for id in 0..field.agent_count() {
         let mut ev = HashMap::new();
-        let acts = make_acts(side, id, field);
+        let acts = make_acts(solver.side(), id, field);
         for act in acts {
-            if let Some(score) = T::eval(side, id, act.clone(), field) {
+            if let Some(score) = solver.eval(id, act.clone()) {
                 ev.insert(act.clone(), score);
             }
         }
