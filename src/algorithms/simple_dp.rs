@@ -149,7 +149,7 @@ impl SimpleDp<'_> {
                 }
             }
         }
-        for t in (1..turn).rev() {
+        for t in (1..=turn).rev() {
             for (pos, now_state) in dp[t].clone() {
                 if now_state.prev_turn.unwrap() == 0 {
                     match self.data.get(&pos) {
@@ -167,9 +167,8 @@ impl SimpleDp<'_> {
                 val.score = val.score.max(now_state.score);
             }
         }
-        for (k, v) in &dp[0] {
-            println!("{}", v.score);
-            self.data.insert(*k, v.score);
+        for (k, v) in &self.data {
+            println!("({},{}): {}", k.x, k.y, v);
         }
     }
 }

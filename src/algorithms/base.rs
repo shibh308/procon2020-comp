@@ -1,5 +1,6 @@
 use crate::field;
 use crate::simulator;
+use crate::simulator::Simulator;
 use field::{Field, Point, PointUsize};
 use ordered_float::OrderedFloat;
 use simulator::Act;
@@ -28,10 +29,9 @@ pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T, stay_val: f64) -> V
                 ev.insert(act.clone(), score);
             }
         }
-        ev.insert(Act::StayAct, stay_val);
         eval_scores.push(ev);
     }
-    primal_dual(eval_scores)
+    primal_dual(solver.side(), eval_scores, &field)
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -134,7 +134,7 @@ impl FlowGraph {
     }
 }
 
-fn primal_dual(acts: Vec<HashMap<Act, f64>>) -> Vec<Act> {
+fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<Act> {
     let max_val = acts.iter().fold(0.0, |ma, item| {
         *vec![
             ma,
@@ -147,10 +147,17 @@ fn primal_dual(acts: Vec<HashMap<Act, f64>>) -> Vec<Act> {
         .max_by(|a, b| a.partial_cmp(b).unwrap())
         .expect("max_by error")
     });
-    let poses: Vec<Act> = acts
+
+    let tile_pos = |id, act: &Act, field: &Field| match act {
+        Act::PutAct(pos) | Act::MoveAct(pos) | Act::RemoveAct(pos) => pos.clone(),
+        Act::StayAct => field.agent(side, id).unwrap(),
+    };
+
+    let poses: Vec<Point> = acts
         .iter()
-        .fold(HashSet::new(), |hs, hm| {
-            let keys: HashSet<Act> = hm.keys().cloned().collect();
+        .enumerate()
+        .fold(HashSet::new(), |hs, (id, hm)| {
+            let keys: HashSet<Point> = hm.keys().map(|act| tile_pos(id, act, field)).collect();
             hs.union(&keys).cloned().collect()
         })
         .into_iter()
@@ -168,7 +175,8 @@ fn primal_dual(acts: Vec<HashMap<Act, f64>>) -> Vec<Act> {
     let mut graph = FlowGraph::new(num_nodes);
     for agent_idx in 0..agent_count {
         for (act, value) in &acts[agent_idx] {
-            let tile_idx = *tile_idx_map.get(&act).expect("tile_idx not found error");
+            let pos = tile_pos(agent_idx, act, field);
+            let tile_idx = *tile_idx_map.get(&pos).expect("tile_idx not found error");
             graph.add(agent_idx, tile_idx, 1, max_val - value, Some(act.clone()));
         }
         graph.add(source_idx, agent_idx, 1, 0.0, None);
@@ -209,7 +217,7 @@ pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {
 pub fn make_acts(side: bool, id: usize, field: &Field) -> Vec<Act> {
     match field.agent(side, id) {
         Some(pos) => {
-            let mut cand = Vec::new();
+            let mut cand = vec![Act::StayAct];
             let moves: Vec<Point> = make_neighbors(pos, field);
             for mov in moves {
                 match field.tile(mov.usize()).state() {
