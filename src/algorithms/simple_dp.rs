@@ -111,8 +111,6 @@ impl SimpleDp<'_> {
                 let score = now_state.score;
                 let neighbors = base::make_neighbors(pos, self.field);
                 for nex in neighbors {
-                    if now_state.used.contains(&nex) {}
-
                     let tile = self.field.tile(nex.usize());
                     if let Some((nex_state, nex_turn)) = match tile.state() {
                         State::Wall(side_) if self.side != side_ => {

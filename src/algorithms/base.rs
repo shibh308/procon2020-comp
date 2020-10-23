@@ -1,6 +1,5 @@
 use crate::field;
 use crate::simulator;
-use crate::simulator::Simulator;
 use field::{Field, Point, PointUsize};
 use ordered_float::OrderedFloat;
 use simulator::Act;
