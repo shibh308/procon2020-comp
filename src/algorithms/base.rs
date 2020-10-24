@@ -2,6 +2,7 @@ use crate::field;
 use crate::simulator;
 use field::{Field, Point, PointUsize};
 use ordered_float::OrderedFloat;
+use rand::Rng;
 use simulator::Act;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -133,6 +134,13 @@ impl FlowGraph {
     }
 }
 
+fn tile_pos(side: bool, id: usize, act: &Act, field: &Field) -> Point {
+    match act {
+        Act::PutAct(pos) | Act::MoveAct(pos) | Act::RemoveAct(pos) => pos.clone(),
+        Act::StayAct => field.agent(side, id).unwrap(),
+    }
+}
+
 fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<Act> {
     let max_val = acts.iter().fold(0.0, |ma, item| {
         *vec![
@@ -147,16 +155,14 @@ fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<A
         .expect("max_by error")
     });
 
-    let tile_pos = |id, act: &Act, field: &Field| match act {
-        Act::PutAct(pos) | Act::MoveAct(pos) | Act::RemoveAct(pos) => pos.clone(),
-        Act::StayAct => field.agent(side, id).unwrap(),
-    };
-
     let poses: Vec<Point> = acts
         .iter()
         .enumerate()
         .fold(HashSet::new(), |hs, (id, hm)| {
-            let keys: HashSet<Point> = hm.keys().map(|act| tile_pos(id, act, field)).collect();
+            let keys: HashSet<Point> = hm
+                .keys()
+                .map(|act| tile_pos(side, id, act, field))
+                .collect();
             hs.union(&keys).cloned().collect()
         })
         .into_iter()
@@ -174,7 +180,7 @@ fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<A
     let mut graph = FlowGraph::new(num_nodes);
     for agent_idx in 0..agent_count {
         for (act, value) in &acts[agent_idx] {
-            let pos = tile_pos(agent_idx, act, field);
+            let pos = tile_pos(side, agent_idx, act, field);
             let tile_idx = *tile_idx_map.get(&pos).expect("tile_idx not found error");
             graph.add(agent_idx, tile_idx, 1, max_val - value, Some(act.clone()));
         }
@@ -198,6 +204,148 @@ fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<A
         }
     }
     acts
+}
+
+fn regret_matching(
+    field: &Field,
+    act_scores: Vec<Vec<HashMap<Act, f64>>>,
+    num_iter: usize,
+) -> Vec<Act> {
+    let mut rng = rand::thread_rng();
+    let agent_count = field.agent_count();
+
+    let mut calc_acts = |regret: &Vec<Vec<HashMap<Act, f64>>>| -> Vec<Vec<Act>> {
+        let regret_sum: Vec<Vec<f64>> = regret
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|hm| hm.iter().fold(0.0, |sum, (_, val)| sum + val))
+                    .collect()
+            })
+            .collect();
+        let prob: Vec<Vec<HashMap<Act, f64>>> = regret
+            .iter()
+            .enumerate()
+            .map(|(side, v)| {
+                v.iter()
+                    .enumerate()
+                    .map(|(id, hm)| {
+                        hm.iter().fold(HashMap::new(), |mut new_hm, (act, val)| {
+                            new_hm.insert(
+                                act.clone(),
+                                if regret_sum[side][id] == 0.0 {
+                                    1.0 / hm.len() as f64
+                                } else {
+                                    val / regret_sum[side][id]
+                                },
+                            );
+                            new_hm
+                        })
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut acts = vec![vec![Act::StayAct; agent_count]; 2];
+        for side in 0..2 {
+            for (id, hm) in prob[side].iter().enumerate() {
+                let per = rng.gen();
+                let mut prob_sum = 0.0;
+                for (k, v) in hm {
+                    prob_sum += v;
+                    if prob_sum < per {
+                        acts[side][id] = k.clone();
+                        break;
+                    }
+                }
+            }
+        }
+        acts
+    };
+
+    let mut regret = act_scores
+        .iter()
+        .map(|v| {
+            v.iter()
+                .map(|hm| {
+                    hm.iter().fold(HashMap::new(), |mut new_hm, (act, _)| {
+                        new_hm.insert(act.clone(), 0.0);
+                        new_hm
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for _ in 0..num_iter {
+        let acts = calc_acts(&regret).clone();
+        let mut act_values = vec![vec![0.0; agent_count]; 2];
+        let mut pos_agents: HashMap<Point, Vec<(usize, usize)>> = HashMap::new();
+        for side in 0..2 {
+            for (id, act) in acts[side].iter().enumerate() {
+                let pos = tile_pos(side != 0, id, act, field);
+                let score = act_scores[side][id].get(act).cloned().unwrap();
+                act_values[side][id] = score;
+                match pos_agents.get(&pos) {
+                    Some(_) => {
+                        pos_agents.get_mut(&pos).unwrap().push((side, id));
+                    }
+                    None => {
+                        pos_agents.insert(pos, vec![(side, id)]);
+                    }
+                }
+            }
+        }
+        for side in 0..2 {
+            for (id, act) in acts[side].iter().enumerate() {
+                let now_val = act_values[side][id].clone();
+                let now_pos = tile_pos(side != 0, id, act, field);
+                let hm = &act_scores[side][id];
+                for (nex_act, nex_val) in hm {
+                    let nex_pos = tile_pos(side != 0, id, nex_act, field);
+                    let bef_cnt = pos_agents.get(&now_pos).map(|v| v.len()).unwrap_or(0);
+                    let aft_cnt = pos_agents.get(&nex_pos).map(|v| v.len()).unwrap_or(0);
+
+                    let reg = (if now_pos == nex_pos {
+                        if bef_cnt == 1 {
+                            nex_val - now_val
+                        } else {
+                            0.0
+                        }
+                    } else {
+                        let mut now_diff = 0.0;
+                        match bef_cnt {
+                            1 => {
+                                now_diff -= now_val;
+                            }
+                            2 => {
+                                for (side_, id_) in pos_agents.get(&now_pos).unwrap() {
+                                    if (side, id) != (*side_, *id_) {
+                                        now_diff += (if side == *side_ { 1.0 } else { -1.0 })
+                                            * act_values[*side_][*id_];
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        match aft_cnt {
+                            0 => {
+                                now_diff += nex_val;
+                            }
+                            1 => {
+                                let (side_, id_) = pos_agents.get(&now_pos).unwrap()[0];
+                                now_diff -= (if side == side_ { 1.0 } else { -1.0 })
+                                    * act_values[side_][id_];
+                            }
+                            _ => {}
+                        }
+                        now_diff
+                    })
+                    .max(0.0);
+                    *regret[side][id].get_mut(nex_act).unwrap() += reg;
+                }
+            }
+        }
+    }
+    calc_acts(&regret)[0].clone()
 }
 
 pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {

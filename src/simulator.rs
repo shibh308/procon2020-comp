@@ -39,7 +39,7 @@ impl Data for Simulator {
 }
 
 impl Simulator {
-    pub fn make(field: field::Field) -> Simulator {
+    pub fn new(field: field::Field) -> Simulator {
         Simulator {
             field: field.clone(),
             acts: vec![vec![Act::StayAct; field.agent_count()]; 2],
