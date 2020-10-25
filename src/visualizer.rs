@@ -101,6 +101,7 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
     let mut flex = Flex::column().must_fill_main_axis(true);
     make_button!(GreedySelect)(&mut flex, side);
     make_button!(SimpleDp)(&mut flex, side);
+    make_button!(SimpleRegret)(&mut flex, side);
     flex.padding(10.).center()
 }
 

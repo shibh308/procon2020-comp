@@ -34,6 +34,36 @@ pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T) -> Vec<Act> {
     primal_dual(solver.side(), eval_scores, &field)
 }
 
+pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
+    side_: bool,
+    field: &'a Field,
+    num_iter: usize,
+) -> Vec<Act> {
+    let solver = [false, true]
+        .iter()
+        .map(|side| {
+            let mut sol = T::new(false, field);
+            sol.solve();
+            sol
+        })
+        .collect::<Vec<_>>();
+
+    let mut eval_scores = vec![Vec::new(); 2];
+    for side in vec![false, true] {
+        for id in 0..field.agent_count() {
+            let mut ev = HashMap::new();
+            let acts = make_acts(side, id, field);
+            for act in acts {
+                if let Some(score) = solver[side as usize].eval(id, act.clone()) {
+                    ev.insert(act.clone(), score);
+                }
+            }
+            eval_scores[side as usize].push(ev);
+        }
+    }
+    regret_matching(side_, eval_scores, &field, num_iter)
+}
+
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 struct MinOrdFloat(Reverse<OrderedFloat<f64>>);
 
@@ -207,8 +237,9 @@ fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<A
 }
 
 fn regret_matching(
-    field: &Field,
+    side_: bool,
     act_scores: Vec<Vec<HashMap<Act, f64>>>,
+    field: &Field,
     num_iter: usize,
 ) -> Vec<Act> {
     let mut rng = rand::thread_rng();
@@ -248,11 +279,11 @@ fn regret_matching(
         let mut acts = vec![vec![Act::StayAct; agent_count]; 2];
         for side in 0..2 {
             for (id, hm) in prob[side].iter().enumerate() {
-                let per = rng.gen();
+                let per = rng.gen::<f64>();
                 let mut prob_sum = 0.0;
                 for (k, v) in hm {
                     prob_sum += v;
-                    if prob_sum < per {
+                    if per < prob_sum {
                         acts[side][id] = k.clone();
                         break;
                     }
@@ -275,7 +306,7 @@ fn regret_matching(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    for _ in 0..num_iter {
+    for t in 0..num_iter {
         let acts = calc_acts(&regret).clone();
         let mut act_values = vec![vec![0.0; agent_count]; 2];
         let mut pos_agents: HashMap<Point, Vec<(usize, usize)>> = HashMap::new();
@@ -294,6 +325,7 @@ fn regret_matching(
                 }
             }
         }
+        let mut regret_sum = 0.0;
         for side in 0..2 {
             for (id, act) in acts[side].iter().enumerate() {
                 let now_val = act_values[side][id].clone();
@@ -341,11 +373,13 @@ fn regret_matching(
                     })
                     .max(0.0);
                     *regret[side][id].get_mut(nex_act).unwrap() += reg;
+                    regret_sum += reg;
                 }
             }
+            println!("iter: {}/{}, regret: {:.2}", t + 1, num_iter, regret_sum);
         }
     }
-    calc_acts(&regret)[0].clone()
+    calc_acts(&regret)[side_ as usize].clone()
 }
 
 pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {
