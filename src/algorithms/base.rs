@@ -7,6 +7,8 @@ use simulator::Act;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
+const PUT_BORDER: i8 = 0;
+
 pub trait Solver<'a> {
     fn new(side: bool, field: &'a Field) -> Self;
     fn field(&self) -> &Field;
@@ -61,7 +63,21 @@ pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
             eval_scores[side as usize].push(ev);
         }
     }
-    regret_matching(side_, eval_scores, &field, num_iter)
+    let prob = regret_matching(side_, eval_scores, &field, num_iter);
+    prob[side_ as usize]
+        .iter()
+        .map(|hm| {
+            hm.iter()
+                .fold((Act::StayAct, -1e18), |now, nex| {
+                    if now.1 < *nex.1 {
+                        (nex.0.clone(), *nex.1)
+                    } else {
+                        now
+                    }
+                })
+                .0
+        })
+        .collect()
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -241,11 +257,11 @@ fn regret_matching(
     act_scores: Vec<Vec<HashMap<Act, f64>>>,
     field: &Field,
     num_iter: usize,
-) -> Vec<Act> {
+) -> Vec<Vec<HashMap<Act, f64>>> {
     let mut rng = rand::thread_rng();
     let agent_count = field.agent_count();
 
-    let mut calc_acts = |regret: &Vec<Vec<HashMap<Act, f64>>>| -> Vec<Vec<Act>> {
+    let mut calc_prob = |regret: &Vec<Vec<HashMap<Act, f64>>>| -> Vec<Vec<HashMap<Act, f64>>> {
         let regret_sum: Vec<Vec<f64>> = regret
             .iter()
             .map(|v| {
@@ -254,7 +270,7 @@ fn regret_matching(
                     .collect()
             })
             .collect();
-        let prob: Vec<Vec<HashMap<Act, f64>>> = regret
+        regret
             .iter()
             .enumerate()
             .map(|(side, v)| {
@@ -275,7 +291,10 @@ fn regret_matching(
                     })
                     .collect()
             })
-            .collect();
+            .collect()
+    };
+    let mut calc_acts = |regret: &Vec<Vec<HashMap<Act, f64>>>| -> Vec<Vec<Act>> {
+        let prob = calc_prob(regret);
         let mut acts = vec![vec![Act::StayAct; agent_count]; 2];
         for side in 0..2 {
             for (id, hm) in prob[side].iter().enumerate() {
@@ -306,6 +325,7 @@ fn regret_matching(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
+
     for t in 0..num_iter {
         let acts = calc_acts(&regret).clone();
         let mut act_values = vec![vec![0.0; agent_count]; 2];
@@ -379,7 +399,7 @@ fn regret_matching(
             println!("iter: {}/{}, regret: {:.2}", t + 1, num_iter, regret_sum);
         }
     }
-    calc_acts(&regret)[side_ as usize].clone()
+    calc_prob(&regret).clone()
 }
 
 pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {
@@ -425,9 +445,11 @@ pub fn make_acts(side: bool, id: usize, field: &Field) -> Vec<Act> {
             (0..field.width()).fold(Vec::new(), |v, x| {
                 v.into_iter()
                     .chain((0..field.height()).filter_map(|y| {
-                        match field.tile(PointUsize::new(x, y)).state() {
+                        let tile = field.tile(PointUsize::new(x, y));
+                        match tile.state() {
                             field::State::Wall(side_) if side == side_ => None,
                             _ if hm.contains(&Point::new(x as i8, y as i8)) => None,
+                            _ if tile.point() < PUT_BORDER => None,
                             _ => Some(Act::PutAct(Point::new(x as i8, y as i8))),
                         }
                     }))

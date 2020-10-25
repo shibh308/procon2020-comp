@@ -6,7 +6,7 @@ use crate::simulator;
 use field::Field;
 use simulator::Act;
 
-const NUM_ITER: usize = 300;
+const NUM_ITER: usize = 10000;
 
 pub struct SimpleRegret<'a> {
     field: &'a Field,
@@ -24,6 +24,7 @@ impl<'a> base::Solver<'a> for SimpleRegret<'a> {
         self.side
     }
     fn solve(&mut self) -> Vec<Act> {
+        // base::solve_regret_matching::<algorithms::GreedySelect>(self.side(), self.field, NUM_ITER)
         base::solve_regret_matching::<algorithms::SimpleDp>(self.side(), self.field, NUM_ITER)
     }
 }
