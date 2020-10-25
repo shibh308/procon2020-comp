@@ -6,7 +6,7 @@ use crate::simulator;
 use field::Field;
 use simulator::Act;
 
-const NUM_ITER: usize = 10000;
+const NUM_ITER: usize = 100;
 
 pub struct SimpleRegret<'a> {
     field: &'a Field,

@@ -64,20 +64,7 @@ pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
         }
     }
     let prob = regret_matching(side_, eval_scores, &field, num_iter);
-    prob[side_ as usize]
-        .iter()
-        .map(|hm| {
-            hm.iter()
-                .fold((Act::StayAct, -1e18), |now, nex| {
-                    if now.1 < *nex.1 {
-                        (nex.0.clone(), *nex.1)
-                    } else {
-                        now
-                    }
-                })
-                .0
-        })
-        .collect()
+    primal_dual(side_, prob, &field)
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -257,7 +244,7 @@ fn regret_matching(
     act_scores: Vec<Vec<HashMap<Act, f64>>>,
     field: &Field,
     num_iter: usize,
-) -> Vec<Vec<HashMap<Act, f64>>> {
+) -> Vec<HashMap<Act, f64>> {
     let mut rng = rand::thread_rng();
     let agent_count = field.agent_count();
 
@@ -396,10 +383,9 @@ fn regret_matching(
                     regret_sum += reg;
                 }
             }
-            println!("iter: {}/{}, regret: {:.2}", t + 1, num_iter, regret_sum);
         }
     }
-    calc_prob(&regret).clone()
+    calc_prob(&regret)[side_ as usize].clone()
 }
 
 pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {
