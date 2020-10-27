@@ -67,93 +67,21 @@ impl Simulator {
             return;
         }
 
-        let mut pos_map = HashSet::new();
-        let mut act_map: HashMap<field::Point, Vec<(bool, usize)>> = HashMap::new();
-
-        for side in vec![true, false] {
-            for i in 0..self.field.agent_count() {
-                let act = self.acts[side as usize][i].clone();
-                self.acts[side as usize][i] = match self.field.agent(side, i) {
-                    Some(agent_pos) => {
-                        if act.move_remove()
-                            && self.field.inside(act.pos().unwrap())
-                            && agent_pos.neighbor(act.pos().unwrap())
-                        {
-                            let state = self.field.tile(act.pos().unwrap().usize()).state();
-                            match act {
-                                Act::MoveAct(_) if state != field::State::Wall(!side) => {
-                                    act.clone()
-                                }
-                                Act::RemoveAct(_) if state.is_wall() => act.clone(),
-                                _ => Act::StayAct,
-                            }
-                        } else {
-                            Act::StayAct
-                        }
-                    }
-                    None => match act {
-                        Act::PutAct(_) => {
-                            let state = self.field.tile(act.pos().unwrap().usize()).state();
-                            if state != field::State::Wall(!side) {
-                                act.clone()
-                            } else {
-                                Act::StayAct
-                            }
-                        }
-                        _ => Act::StayAct,
-                    },
-                };
-                if let Some(pos) = &act.pos() {
-                    match act_map.get_mut(&pos) {
-                        Some(v) => v.push((side, i)),
-                        None => {
-                            act_map.insert(pos.clone(), vec![(side, i)]);
-                        }
-                    }
+        let act_vec = act_list(&self.acts, &self.field);
+        for (side, id, act) in act_vec {
+            match act {
+                Act::PutAct(nex_pos) | Act::MoveAct(nex_pos) => {
+                    self.field.set_agent(side, id, Some(nex_pos));
+                    self.field
+                        .set_state(nex_pos.usize(), field::State::Wall(side));
                 }
-                if let Some(agent_pos) = &self.field.agent(side, i) {
-                    pos_map.insert(agent_pos.clone());
+                Act::RemoveAct(nex_pos) => {
+                    self.field.set_state(nex_pos.usize(), field::State::Neutral);
                 }
-            }
-        }
-        let mut que = VecDeque::new();
-        for k in act_map.keys() {
-            if !pos_map.contains(k) {
-                que.push_back(k.clone());
+                _ => {}
             }
         }
 
-        while !que.is_empty() {
-            let k = que.front().unwrap().clone();
-            que.pop_front();
-            if let Some(out_moves) = act_map.get(&k) {
-                if out_moves.len() >= 2 {
-                    continue;
-                }
-                for (side, idx) in out_moves {
-                    let before_pos = self.field.agent(*side, *idx).clone();
-                    let act = &self.acts[*side as usize][*idx];
-                    match act {
-                        Act::PutAct(nex_pos) | Act::MoveAct(nex_pos) => {
-                            self.field.set_agent(*side, *idx, Some(*nex_pos));
-                            self.field
-                                .set_state(nex_pos.usize(), field::State::Wall(*side));
-                        }
-                        Act::RemoveAct(nex_pos) => {
-                            self.field.set_state(nex_pos.usize(), field::State::Neutral);
-                        }
-                        _ => {}
-                    }
-
-                    if let Some(bef_pos) = before_pos {
-                        if before_pos != self.field.agent(*side, *idx) {
-                            pos_map.remove(&bef_pos);
-                            que.push_back(bef_pos);
-                        }
-                    }
-                }
-            }
-        }
         self.field.update_region();
         self.field.update_score();
         self.field.update_turn();
@@ -161,4 +89,85 @@ impl Simulator {
         self.act_flag[0] = false;
         self.act_flag[1] = false;
     }
+}
+
+pub fn act_list(acts_: &Vec<Vec<Act>>, field: &field::Field) -> Vec<(bool, usize, Act)> {
+    let mut acts = acts_.clone();
+    let mut pos_map = HashSet::new();
+    let mut act_map: HashMap<field::Point, Vec<(bool, usize)>> = HashMap::new();
+
+    for side in vec![true, false] {
+        for i in 0..field.agent_count() {
+            let act = acts[side as usize][i].clone();
+            acts[side as usize][i] = match field.agent(side, i) {
+                Some(agent_pos) => {
+                    if act.move_remove()
+                        && field.inside(act.pos().unwrap())
+                        && agent_pos.neighbor(act.pos().unwrap())
+                    {
+                        let state = field.tile(act.pos().unwrap().usize()).state();
+                        match act {
+                            Act::MoveAct(_) if state != field::State::Wall(!side) => act.clone(),
+                            Act::RemoveAct(_) if state.is_wall() => act.clone(),
+                            _ => Act::StayAct,
+                        }
+                    } else {
+                        Act::StayAct
+                    }
+                }
+                None => match act {
+                    Act::PutAct(_) => {
+                        let state = field.tile(act.pos().unwrap().usize()).state();
+                        if state != field::State::Wall(!side) {
+                            act.clone()
+                        } else {
+                            Act::StayAct
+                        }
+                    }
+                    _ => Act::StayAct,
+                },
+            };
+            if let Some(pos) = &act.pos() {
+                match act_map.get_mut(&pos) {
+                    Some(v) => v.push((side, i)),
+                    None => {
+                        act_map.insert(pos.clone(), vec![(side, i)]);
+                    }
+                }
+            }
+            if let Some(agent_pos) = &field.agent(side, i) {
+                pos_map.insert(agent_pos.clone());
+            }
+        }
+    }
+    let mut que = VecDeque::new();
+    for k in act_map.keys() {
+        if !pos_map.contains(k) {
+            que.push_back(k.clone());
+        }
+    }
+
+    let mut act_vec = Vec::new();
+
+    while !que.is_empty() {
+        let k = que.front().unwrap().clone();
+        que.pop_front();
+        if let Some(out_moves) = act_map.get(&k) {
+            if out_moves.len() >= 2 {
+                continue;
+            }
+            for (side, idx) in out_moves {
+                let before_pos = field.agent(*side, *idx).clone();
+                let act = &acts[*side as usize][*idx];
+                act_vec.push((*side, *idx, act.clone()));
+                if let Some(bef_pos) = before_pos {
+                    if before_pos != field.agent(*side, *idx) {
+                        pos_map.remove(&bef_pos);
+                        que.push_back(bef_pos);
+                    }
+                }
+            }
+        }
+    }
+    act_vec
 }

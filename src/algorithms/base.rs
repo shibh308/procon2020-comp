@@ -33,7 +33,7 @@ pub fn solve<'a, T: Solver<'a> + EachEvalSolver>(solver: &T) -> Vec<Act> {
         }
         eval_scores.push(ev);
     }
-    primal_dual(solver.side(), eval_scores, &field)
+    primal_dual(solver.side(), &eval_scores, &field)
 }
 
 pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
@@ -64,7 +64,7 @@ pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
         }
     }
     let prob = regret_matching(side_, eval_scores, &field, num_iter);
-    primal_dual(side_, prob, &field)
+    primal_dual(side_, &prob, &field)
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -174,7 +174,7 @@ fn tile_pos(side: bool, id: usize, act: &Act, field: &Field) -> Point {
     }
 }
 
-fn primal_dual(side: bool, acts: Vec<HashMap<Act, f64>>, field: &Field) -> Vec<Act> {
+fn primal_dual(side: bool, acts: &Vec<HashMap<Act, f64>>, field: &Field) -> Vec<Act> {
     let max_val = acts.iter().fold(0.0, |ma, item| {
         *vec![
             ma,
@@ -314,6 +314,16 @@ fn regret_matching(
         .collect::<Vec<_>>();
 
     for t in 0..num_iter {
+        /*
+        let acts = if t == 0 {
+            vec![
+                primal_dual(false, &act_scores[0], field),
+                primal_dual(true, &act_scores[1], field),
+            ]
+        } else {
+            calc_acts(&regret).clone()
+        };
+         */
         let acts = calc_acts(&regret).clone();
         let mut act_values = vec![vec![0.0; agent_count]; 2];
         let mut pos_agents: HashMap<Point, Vec<(usize, usize)>> = HashMap::new();
@@ -332,58 +342,48 @@ fn regret_matching(
                 }
             }
         }
+
+        let mut mut_acts = acts.clone();
         let mut regret_sum = 0.0;
+
+        let now_val = {
+            let mut now_reg = 0.0;
+            let act_vec = simulator::act_list(&acts, field);
+            for (side_, id_, act_) in act_vec {
+                now_reg += act_scores[side_ as usize][id_][&act_];
+            }
+            now_reg
+        };
+
         for side in 0..2 {
             for (id, act) in acts[side].iter().enumerate() {
-                let now_val = act_values[side][id].clone();
-                let now_pos = tile_pos(side != 0, id, act, field);
                 let hm = &act_scores[side][id];
-                for (nex_act, nex_val) in hm {
-                    let nex_pos = tile_pos(side != 0, id, nex_act, field);
-                    let bef_cnt = pos_agents.get(&now_pos).map(|v| v.len()).unwrap_or(0);
-                    let aft_cnt = pos_agents.get(&nex_pos).map(|v| v.len()).unwrap_or(0);
-
-                    let reg = (if now_pos == nex_pos {
-                        if bef_cnt == 1 {
-                            nex_val - now_val
-                        } else {
-                            0.0
+                for (nex_act, _) in hm {
+                    mut_acts[side][id] = nex_act.clone();
+                    let reg = {
+                        let mut now_reg = -now_val;
+                        let act_vec = simulator::act_list(&mut_acts, field);
+                        for (side_, id_, act_) in act_vec {
+                            now_reg += act_scores[side_ as usize][id_][&act_];
                         }
-                    } else {
-                        let mut now_diff = 0.0;
-                        match bef_cnt {
-                            1 => {
-                                now_diff -= now_val;
-                            }
-                            2 => {
-                                for (side_, id_) in pos_agents.get(&now_pos).unwrap() {
-                                    if (side, id) != (*side_, *id_) {
-                                        now_diff += (if side == *side_ { 1.0 } else { -1.0 })
-                                            * act_values[*side_][*id_];
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                        match aft_cnt {
-                            0 => {
-                                now_diff += nex_val;
-                            }
-                            1 => {
-                                let (side_, id_) = pos_agents.get(&now_pos).unwrap()[0];
-                                now_diff -= (if side == side_ { 1.0 } else { -1.0 })
-                                    * act_values[side_][id_];
-                            }
-                            _ => {}
-                        }
-                        now_diff
-                    })
+                        now_reg
+                    }
                     .max(0.0);
                     *regret[side][id].get_mut(nex_act).unwrap() += reg;
                     regret_sum += reg;
+                    mut_acts[side][id] = act.clone();
                 }
             }
         }
+        println!("{}/{}: {}", t, num_iter, regret_sum);
+        let lm = calc_prob(&regret)[side_ as usize].clone();
+        for id in 0..agent_count {
+            println!(
+                "max: {}",
+                lm[id].iter().fold(0.0, |now: f64, (k, v)| now.max(*v))
+            );
+        }
+        println!("");
     }
     calc_prob(&regret)[side_ as usize].clone()
 }
@@ -433,7 +433,7 @@ pub fn make_acts(side: bool, id: usize, field: &Field) -> Vec<Act> {
                     .chain((0..field.height()).filter_map(|y| {
                         let tile = field.tile(PointUsize::new(x, y));
                         match tile.state() {
-                            field::State::Wall(side_) if side == side_ => None,
+                            field::State::Wall(side_) if side != side_ => None,
                             _ if hm.contains(&Point::new(x as i8, y as i8)) => None,
                             _ if tile.point() < PUT_BORDER => None,
                             _ => Some(Act::PutAct(Point::new(x as i8, y as i8))),
@@ -454,8 +454,12 @@ pub fn point(side: bool, act: Act, field: &Field) -> Option<i8> {
             match state {
                 field::State::Wall(side_) if side != side_ => None,
                 field::State::Neutral => Some(tile.point()),
-                field::State::Position(side_) if side != side_ => {
-                    Some(tile.point() - tile.point().abs())
+                field::State::Position(side_) => {
+                    if side != side_ {
+                        Some(tile.point() + tile.point().abs())
+                    } else {
+                        Some(tile.point() - tile.point().abs())
+                    }
                 }
                 _ => Some(0),
             }

@@ -1,3 +1,4 @@
+use crate::api::parse::TeamData;
 use druid::Data;
 use rand;
 use rand::Rng;
@@ -152,7 +153,11 @@ impl Field {
                     (0..height)
                         .map(|_y| Tile {
                             state: State::Neutral,
-                            point: rng.gen_range(-16, 17),
+                            point: if rng.gen::<f64>() < 0.25 {
+                                rng.gen_range(-16, 0)
+                            } else {
+                                rng.gen_range(0, 17)
+                            },
                         })
                         .collect()
                 })
@@ -162,7 +167,48 @@ impl Field {
         };
         field
     }
-    fn read_field(id: &str) -> Field {
+    pub fn from_data(
+        width: usize,
+        height: usize,
+        team_data: Vec<TeamData>,
+        walls: Vec<Vec<u32>>,
+        points: Vec<Vec<i8>>,
+        agents: Vec<Vec<Point>>,
+        now_turn: u8,
+        final_turn: u8,
+    ) -> Field {
+        let mut field = Field {
+            now_turn,
+            final_turn,
+            tiles: (0..width)
+                .map(|x| {
+                    (0..height)
+                        .map(|y| Tile {
+                            state: {
+                                if walls[x][y] == team_data[0].team_id {
+                                    State::Wall(false)
+                                } else if walls[x][y] == team_data[1].team_id {
+                                    State::Wall(true)
+                                } else {
+                                    State::Neutral
+                                }
+                            },
+                            point: points[x][y] as i8,
+                        })
+                        .collect()
+                })
+                .collect(),
+            agents: agents
+                .iter()
+                .map(|v| v.iter().map(|p| Some(p.clone())).collect())
+                .collect(),
+            scores: vec![Score { tile: 0, region: 0 }; 2],
+        };
+        field.update_region();
+        field.update_score();
+        field
+    }
+    pub fn read_field(id: &str) -> Field {
         Field::new(None, None, None)
     }
     pub fn width(&self) -> usize {
