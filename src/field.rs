@@ -173,7 +173,7 @@ impl Field {
         team_data: Vec<TeamData>,
         walls: Vec<Vec<u32>>,
         points: Vec<Vec<i8>>,
-        agents: Vec<Vec<Point>>,
+        agents: Vec<Vec<Option<Point>>>,
         now_turn: u8,
         final_turn: u8,
     ) -> Field {
@@ -200,7 +200,7 @@ impl Field {
                 .collect(),
             agents: agents
                 .iter()
-                .map(|v| v.iter().map(|p| Some(p.clone())).collect())
+                .map(|v| v.iter().map(|p| p.clone()).collect())
                 .collect(),
             scores: vec![Score { tile: 0, region: 0 }; 2],
         };

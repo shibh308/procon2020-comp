@@ -88,10 +88,14 @@ pub fn parse_field_data(str: String, final_turn: u8) -> Result<FieldData, String
                         .enumerate()
                         .map(|(idx, dat)| {
                             let x = to_result(dat[idx]["x"].as_u64(), "x");
-                            let x = err_ret!(x) as i8;
+                            let x = err_ret!(x) as i8 - 1;
                             let y = to_result(dat[idx]["y"].as_u64(), "y");
-                            let y = err_ret!(y) as i8;
-                            Ok(field::Point::new(x, y))
+                            let y = err_ret!(y) as i8 - 1;
+                            if x == -1 {
+                                Ok(None)
+                            } else {
+                                Ok(Some(field::Point::new(x, y)))
+                            }
                         })
                         .collect::<Vec<_>>();
                     Ok(err_ret_vec!(agent_pos))
