@@ -161,9 +161,11 @@ pub fn act_list(acts_: &Vec<Vec<Act>>, field: &field::Field) -> Vec<(bool, usize
                 let act = &acts[*side as usize][*idx];
                 act_vec.push((*side, *idx, act.clone()));
                 if let Some(bef_pos) = before_pos {
-                    if before_pos != field.agent(*side, *idx) {
-                        pos_map.remove(&bef_pos);
-                        que.push_back(bef_pos);
+                    if let Act::MoveAct(_) = act {
+                        if pos_map.contains(&bef_pos) {
+                            pos_map.remove(&bef_pos);
+                            que.push_back(bef_pos);
+                        }
                     }
                 }
             }
