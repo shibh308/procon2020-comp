@@ -8,17 +8,23 @@ use num_traits::pow;
 use rand::Rng;
 use simulator::Act;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Instant;
 
 const DEPTH: usize = 5;
 const WIDTH: usize = 10;
 const PER: f64 = 0.7;
-const DIST_WEIGHT: f64 = 10.0;
 
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
 const SA_SEC: f64 = 1.0;
+
+const SA_LAST_PENA: f64 = 0.3;
+const SA_LAST_POW: f64 = 3.5;
+const SA_CONF_PER: f64 = 0.7;
+const SA_CONF_PENA: f64 = 3.5;
+const SA_DIST_PENA: f64 = 15.0;
+const SA_DIST_POW: f64 = 0.4;
 
 const LCP_PER: f64 = 2.0;
 const LCP_POW: f64 = 2.0;
@@ -95,36 +101,86 @@ impl DpState {
 }
 
 impl SocialDistance<'_> {
-    fn distance_eval(&self, poses: &Vec<Point>) -> f64 {
-        let f = |p1: &Point, p2: &Point| -> f64 {
-            let xd = (p1.x - p2.x).abs() as f64;
-            let yd = (p1.y - p2.y).abs() as f64;
-            xd * xd + yd * yd
-        };
-        let mut score = 0.0;
-        for (i, p1) in poses.iter().enumerate() {
-            for p2 in &poses[i + 1..] {
-                score += f(p1, p2);
-            }
-        }
-        score
-    }
     fn calc_score(&self, bs_data: &Vec<Vec<(f64, Act, Vec<Point>)>>, sel: &Vec<usize>) -> f64 {
         let acts = sel
             .iter()
             .zip(bs_data)
             .map(|(idx, dat)| &dat[*idx])
             .collect::<Vec<_>>();
-        acts.iter().fold(0.0, |b, x| b + x.0)
+        let mut score = acts.iter().fold(0.0, |b, x| b + x.0);
+
+        let pos_data = sel
+            .iter()
+            .enumerate()
+            .map(|(i, x)| &bs_data[i][*x].2)
+            .collect::<Vec<_>>();
+
+        let mut per_map = HashMap::new();
+        let mut prev_per = vec![1.0; pos_data.len()];
+        for j in 0..=DEPTH {
+            let per_pow = SA_CONF_PER.powf(j as f64);
+            let per_pow_dist = SA_DIST_POW.powf(j as f64);
+
+            if j != 0 {
+                let poses = pos_data.iter().map(|x| x[j]).collect::<Vec<_>>();
+                let f = |p1: &Point, p2: &Point| -> f64 {
+                    let xd = (p1.x - p2.x).abs() as f64;
+                    let yd = (p1.y - p2.y).abs() as f64;
+                    xd * xd + yd * yd
+                };
+                println!("bef: {}", score);
+                for (idx1, p) in poses.iter().enumerate() {
+                    for (idx2, q) in poses.iter().take(idx1).enumerate() {
+                        score -= SA_DIST_PENA * per_pow_dist * prev_per[idx1] * prev_per[idx2]
+                            / f(p, q).max(0.5);
+                    }
+                }
+                println!("aft: {}", score);
+            }
+
+            for (i, pd) in pos_data.iter().enumerate() {
+                let pos = pd[j].clone();
+                // 到達確率
+                let per = if j != 0 && pd[j - 1] == pd[j] {
+                    1.0
+                } else {
+                    // マスが踏まれている確率を更新していく
+                    match per_map.get_mut(&pos) {
+                        Some(val) => {
+                            let prev_val = *val;
+                            *val = prev_val + (1.0 - prev_val) * prev_per[i] * per_pow;
+                            1.0 - prev_val
+                        }
+                        None => {
+                            per_map.insert(pos, prev_per[i] * per_pow);
+                            1.0
+                        }
+                    }
+                } * prev_per[i];
+                prev_per[i] = per;
+                let tile = self.field.tile(pos.usize());
+                let raw_score = match tile.state() {
+                    State::Wall(s) if s == self.side => 0,
+                    _ => tile.point(),
+                };
+                // 到達できない確率だけ減らしていく
+                score -= SA_CONF_PENA * raw_score as f64 * per_pow * (1.0 - per);
+            }
+            println!("{:?}", prev_per);
+        }
+        let last_pena = acts.iter().enumerate().fold(0.0, |b, (idx, x)| {
+            b + x.0 * (1.0 - prev_per[idx]).powf(SA_LAST_POW)
+        }) * SA_LAST_PENA;
+        score -= last_pena;
+        score
     }
     fn simulated_annealing(&self, bs_res: &Vec<Vec<(f64, Act, Vec<Point>)>>) -> Vec<usize> {
-        let mut sel = vec![0; self.field.agent_count()];
+        let mut sel = vec![0; bs_res.len()];
         let mut now_score = self.calc_score(&bs_res, &sel);
         let mut answer = (now_score, sel.clone());
         let mut stack = Vec::new();
         let start_time = Instant::now();
         let mut rng = rand::thread_rng();
-        println!("loop start");
         loop {
             let elapsed = start_time.elapsed().as_secs_f64();
             if elapsed >= SA_SEC {
