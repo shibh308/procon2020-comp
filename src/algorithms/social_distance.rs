@@ -19,8 +19,12 @@ const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
 const SA_SEC: f64 = 1.0;
 
+const AG_CONF_PER: f64 = 0.3;
+
 const SA_LAST_PENA: f64 = 0.3;
 const SA_LAST_POW: f64 = 3.5;
+const SA_LAST_SUPER_PENA: f64 = 2.5;
+const SA_LAST_SUPER_BORDER: f64 = 0.25;
 const SA_CONF_PER: f64 = 0.7;
 const SA_CONF_PENA: f64 = 3.5;
 const SA_DIST_PENA: f64 = 15.0;
@@ -33,12 +37,17 @@ const SAME_TILE_POW: f64 = 2.0;
 
 pub struct SocialDistance<'a> {
     field: &'a Field,
+    agent_set: HashSet<Point>,
     side: bool,
 }
 
 impl<'a> base::Solver<'a> for SocialDistance<'a> {
     fn new(side: bool, field: &'a Field) -> SocialDistance<'a> {
-        SocialDistance { field, side }
+        SocialDistance {
+            field,
+            side,
+            agent_set: HashSet::new(),
+        }
     }
     fn field(&self) -> &Field {
         self.field
@@ -48,6 +57,11 @@ impl<'a> base::Solver<'a> for SocialDistance<'a> {
     }
     fn solve(&mut self) -> Vec<Act> {
         let mut acts = vec![Act::StayAct; self.field.agent_count()];
+        for id in 0..self.field.agent_count() {
+            if let Some(pos) = self.field.agent(!self.side, id) {
+                self.agent_set.insert(pos);
+            }
+        }
         self.move_confirm(&mut acts);
         acts
     }
@@ -59,8 +73,7 @@ struct DpState {
     pos: Point,
     act: Act,
     used: HashSet<Point>,
-    prev_turn: Option<usize>,
-    prev_idx: Option<usize>,
+    poses: Vec<Point>,
 }
 
 impl Ord for DpState {
@@ -75,16 +88,15 @@ impl PartialOrd for DpState {
 }
 
 impl DpState {
-    fn from(
-        &self,
-        nex_pos: Point,
-        nex_act: Act,
-        add_score: f64,
-        prev_turn: usize,
-        prev_idx: usize,
-    ) -> DpState {
+    fn from(&self, nex_pos: Point, nex_act: Act, add_score: f64) -> DpState {
+        assert_ne!(self.pos, nex_pos);
         let mut nex_used = self.used.clone();
         nex_used.insert(nex_pos.clone());
+        let mut poses = self.poses.clone();
+        poses.push(nex_pos.clone());
+        if let Act::RemoveAct(_) = nex_act {
+            poses.push(nex_pos.clone());
+        }
         DpState {
             score: MinOrdFloat::new(self.score.raw() + add_score),
             pos: nex_pos,
@@ -94,14 +106,18 @@ impl DpState {
                 self.act.clone()
             },
             used: nex_used,
-            prev_turn: Some(prev_turn),
-            prev_idx: Some(prev_idx),
+            poses,
         }
     }
 }
 
 impl SocialDistance<'_> {
-    fn calc_score(&self, bs_data: &Vec<Vec<(f64, Act, Vec<Point>)>>, sel: &Vec<usize>) -> f64 {
+    fn calc_score(
+        &self,
+        bs_data: &Vec<Vec<(f64, Act, Vec<Point>)>>,
+        sel: &Vec<usize>,
+        output: bool,
+    ) -> f64 {
         let acts = sel
             .iter()
             .zip(bs_data)
@@ -117,25 +133,21 @@ impl SocialDistance<'_> {
 
         let mut per_map = HashMap::new();
         let mut prev_per = vec![1.0; pos_data.len()];
-        for j in 0..=DEPTH {
-            let per_pow = SA_CONF_PER.powf(j as f64);
+        for j in 1..=DEPTH {
+            let per_pow = SA_CONF_PER.powf((j - 1) as f64);
             let per_pow_dist = SA_DIST_POW.powf(j as f64);
 
-            if j != 0 {
-                let poses = pos_data.iter().map(|x| x[j]).collect::<Vec<_>>();
-                let f = |p1: &Point, p2: &Point| -> f64 {
-                    let xd = (p1.x - p2.x).abs() as f64;
-                    let yd = (p1.y - p2.y).abs() as f64;
-                    xd * xd + yd * yd
-                };
-                println!("bef: {}", score);
-                for (idx1, p) in poses.iter().enumerate() {
-                    for (idx2, q) in poses.iter().take(idx1).enumerate() {
-                        score -= SA_DIST_PENA * per_pow_dist * prev_per[idx1] * prev_per[idx2]
-                            / f(p, q).max(0.5);
-                    }
+            let poses = pos_data.iter().map(|x| x[j]).collect::<Vec<_>>();
+            let f = |p1: &Point, p2: &Point| -> f64 {
+                let xd = (p1.x - p2.x).abs() as f64;
+                let yd = (p1.y - p2.y).abs() as f64;
+                xd * xd + yd * yd
+            };
+            for (idx1, p) in poses.iter().enumerate() {
+                for (idx2, q) in poses.iter().take(idx1).enumerate() {
+                    score -= SA_DIST_PENA * per_pow_dist * prev_per[idx1] * prev_per[idx2]
+                        / f(p, q).max(0.5);
                 }
-                println!("aft: {}", score);
             }
 
             for (i, pd) in pos_data.iter().enumerate() {
@@ -166,17 +178,28 @@ impl SocialDistance<'_> {
                 // 到達できない確率だけ減らしていく
                 score -= SA_CONF_PENA * raw_score as f64 * per_pow * (1.0 - per);
             }
-            println!("{:?}", prev_per);
         }
         let last_pena = acts.iter().enumerate().fold(0.0, |b, (idx, x)| {
-            b + x.0 * (1.0 - prev_per[idx]).powf(SA_LAST_POW)
+            b + if prev_per[idx] < SA_LAST_SUPER_BORDER {
+                x.0 * (1.0 - prev_per[idx]) * SA_LAST_SUPER_PENA
+            } else {
+                x.0 * (1.0 - prev_per[idx]).powf(SA_LAST_POW)
+            }
         }) * SA_LAST_PENA;
         score -= last_pena;
+
+        if output {
+            println!("poses:");
+            for (i, p) in pos_data.iter().enumerate() {
+                println!("{:?} => {:?}", acts[i].0, p);
+            }
+            println!("per: {:?}", prev_per);
+        }
         score
     }
     fn simulated_annealing(&self, bs_res: &Vec<Vec<(f64, Act, Vec<Point>)>>) -> Vec<usize> {
         let mut sel = vec![0; bs_res.len()];
-        let mut now_score = self.calc_score(&bs_res, &sel);
+        let mut now_score = self.calc_score(&bs_res, &sel, false);
         let mut answer = (now_score, sel.clone());
         let mut stack = Vec::new();
         let start_time = Instant::now();
@@ -215,10 +238,11 @@ impl SocialDistance<'_> {
                 sel[idx2] = to2;
             }
 
-            let nex_score = self.calc_score(&bs_res, &sel);
+            let nex_score = self.calc_score(&bs_res, &sel, false);
             let temp = (END_TEMP - START_TEMP) * (start_time.elapsed().as_secs_f64() / SA_SEC)
                 + START_TEMP;
             let prob = ((nex_score - now_score) / temp).exp();
+            // println!("{} => {}  ({})", now_score, nex_score, prob);
 
             let updated = if prob >= rng.gen::<f64>() {
                 now_score = nex_score;
@@ -236,7 +260,10 @@ impl SocialDistance<'_> {
                 }
             }
         }
-        sel
+        println!("last:");
+        self.calc_score(&bs_res, &answer.1, true);
+        println!("res:{} {:?}", answer.0, answer.1);
+        answer.1
     }
     fn move_confirm(&self, acts: &mut Vec<Act>) {
         let idxes = (0..self.field.agent_count())
@@ -268,15 +295,19 @@ impl SocialDistance<'_> {
         }
          */
     }
+    /*
     fn get_poses(&self, state: &DpState, turn: usize, table: &Vec<Vec<DpState>>) -> Vec<Point> {
         let mut v = vec![None; turn + 1];
         let mut top = state;
         v[turn] = Some(top.pos);
+        let mut vp = Vec::new();
         while top.prev_idx.is_some() {
             let prev_turn = top.prev_turn.unwrap();
             top = &table[prev_turn][top.prev_idx.unwrap()];
             v[prev_turn] = Some(top.pos.clone());
+            vp.push(prev_turn);
         }
+        println!("{:?}", vp);
         let mut now = None;
         let mut res = Vec::new();
         for elm in v {
@@ -287,14 +318,14 @@ impl SocialDistance<'_> {
         }
         res
     }
+     */
     fn reduce_cand(
         &self,
-        dp_table: &Vec<Vec<DpState>>,
+        cand: &Vec<DpState>,
         t: usize,
         lcp_per: f64,
         same_tile_per: f64,
     ) -> (Vec<DpState>, f64) {
-        let cand = &dp_table[t];
         let mut res = Vec::new();
 
         let mut h_map = BTreeSet::new();
@@ -305,11 +336,10 @@ impl SocialDistance<'_> {
 
             let mut top = state;
             let mut poses = vec![top.pos.clone()];
-            poses = self.get_poses(top, t, dp_table);
             let mut poses_pref = Vec::new();
-            let mut lcp = poses.len();
-            for i in 0..poses.len() {
-                poses_pref.push(poses[i]);
+            let mut lcp = state.poses.len();
+            for i in 0..state.poses.len() {
+                poses_pref.push(state.poses[i]);
                 if !h_map.contains(&poses_pref) {
                     lcp = i;
                     break;
@@ -317,7 +347,7 @@ impl SocialDistance<'_> {
             }
             let btree_used = state.used.iter().cloned().collect::<BTreeSet<_>>();
 
-            let mut hs_vec = pos_v
+            let hs_vec = pos_v
                 .iter()
                 .map(|hs| hs.intersection(&btree_used).collect::<Vec<_>>().len())
                 .collect::<Vec<_>>();
@@ -375,11 +405,13 @@ impl SocialDistance<'_> {
             .map(|x| x.1.clone())
             .collect::<Vec<_>>();
         selected.sort();
+        /*
         if t == DEPTH {
             for c in &selected {
                 println!("{}: {:?}", c.score.raw(), self.get_poses(c, t, dp_table));
             }
         }
+         */
         (selected, val)
     }
 
@@ -390,13 +422,13 @@ impl SocialDistance<'_> {
             pos: start_pos,
             act: Act::StayAct,
             used: HashSet::new(),
-            prev_turn: None,
-            prev_idx: None,
+            poses: vec![start_pos.clone()],
         });
         cand[0][0].used.insert(start_pos);
         for t in 0..max_depth {
             cand[t].sort();
-            let (bef, _) = self.reduce_cand(&cand, t, LCP_PER, SAME_TILE_PER);
+            let (bef, _) = self.reduce_cand(&cand[t], t, LCP_PER, SAME_TILE_PER);
+            cand[t] = bef.clone();
             for (idx, now_state) in bef.iter().enumerate() {
                 let neighbors = base::make_neighbors(now_state.pos, self.field);
                 for nex in neighbors {
@@ -406,25 +438,10 @@ impl SocialDistance<'_> {
                             let act = Act::RemoveAct(nex);
                             if let Some(point) = self.calc_base(&now_state, &nex, &act) {
                                 if t == max_depth - 1 {
-                                    Some((
-                                        now_state.from(
-                                            now_state.pos,
-                                            act,
-                                            point * pow(PER, t),
-                                            t,
-                                            idx,
-                                        ),
-                                        t + 1,
-                                    ))
+                                    Some((now_state.from(nex, act, point * pow(PER, t)), t + 1))
                                 } else {
                                     Some((
-                                        now_state.from(
-                                            now_state.pos,
-                                            act,
-                                            point * (1.0 + PER) * pow(PER, t),
-                                            t,
-                                            idx,
-                                        ),
+                                        now_state.from(nex, act, point * (1.0 + PER) * pow(PER, t)),
                                         t + 2,
                                     ))
                                 }
@@ -434,8 +451,9 @@ impl SocialDistance<'_> {
                         }
                         _ => {
                             let act = Act::MoveAct(nex);
+                            println!("move: {:?} => {:?}", now_state.pos, nex);
                             if let Some(point) = self.calc_base(&now_state, &nex, &act) {
-                                Some((now_state.from(nex, act, point * pow(PER, t), t, idx), t + 1))
+                                Some((now_state.from(nex, act, point * pow(PER, t)), t + 1))
                             } else {
                                 None
                             }
@@ -446,15 +464,17 @@ impl SocialDistance<'_> {
                 }
             }
         }
-        let (final_res, average) = self.reduce_cand(&cand, max_depth, LCP_PER, SAME_TILE_PER);
+        let (final_res, average) =
+            self.reduce_cand(&cand[max_depth], max_depth, LCP_PER, SAME_TILE_PER);
+        cand[max_depth] = final_res.clone();
         // println!("avl: {}", average);
         let mut res = Vec::new();
         for top_res in final_res {
             let top = top_res.clone();
             let score = top.score.raw();
             let act = top.act.clone();
-            let v = self.get_poses(&top, max_depth, &cand);
-            res.push((score, act, v));
+            println!("poses: {:?}", top.poses);
+            res.push((score, act, top.poses));
         }
         res
     }
@@ -464,6 +484,11 @@ impl SocialDistance<'_> {
                 0.0
             } else {
                 point as f64
+                    * if self.agent_set.contains(nex_pos) {
+                        AG_CONF_PER
+                    } else {
+                        1.0
+                    }
             }),
             None => None,
         }

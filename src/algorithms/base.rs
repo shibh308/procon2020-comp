@@ -409,7 +409,7 @@ pub fn make_neighbors(pos: Point, field: &Field) -> Vec<Point> {
         })
         .iter()
         .map(|p| (pos + *p))
-        .filter(|p| field.inside(*p))
+        .filter(|p| field.inside(*p) && pos != *p)
         .collect()
 }
 
