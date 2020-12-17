@@ -17,7 +17,7 @@ const PER: f64 = 0.7;
 
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
-const SA_SEC: f64 = 1.0;
+const SA_SEC: f64 = 0.3;
 
 const AG_CONF_PER: f64 = 0.3;
 
@@ -27,7 +27,7 @@ const SA_LAST_SUPER_PENA: f64 = 2.5;
 const SA_LAST_SUPER_BORDER: f64 = 0.25;
 const SA_CONF_PER: f64 = 0.7;
 const SA_CONF_PENA: f64 = 3.5;
-const SA_DIST_PENA: f64 = 15.0;
+const SA_DIST_PENA: f64 = 30.0;
 const SA_DIST_POW: f64 = 0.4;
 
 const LCP_PER: f64 = 2.0;
@@ -138,6 +138,10 @@ impl SocialDistance<'_> {
             let per_pow_dist = SA_DIST_POW.powf(j as f64);
 
             let poses = pos_data.iter().map(|x| x[j]).collect::<Vec<_>>();
+            if j == 1 && poses.iter().collect::<HashSet<_>>().len() != poses.len() {
+                score = -1e5;
+                break;
+            }
             let f = |p1: &Point, p2: &Point| -> f64 {
                 let xd = (p1.x - p2.x).abs() as f64;
                 let yd = (p1.y - p2.y).abs() as f64;
@@ -210,12 +214,18 @@ impl SocialDistance<'_> {
                 break;
             }
 
-            if rng.gen::<f32>() <= 0.8 {
+            if bs_res.len() <= 1 || rng.gen::<f32>() <= 0.8 {
                 let idx = rng.gen_range(0, bs_res.len());
-                let mut to = rng.gen_range(0, bs_res[idx].len() - 1);
-                if to >= sel[idx] {
-                    to += 1;
-                }
+                let mut to = if bs_res[idx].len() == 1 {
+                    0
+                } else {
+                    let p = rng.gen_range(0, bs_res[idx].len() - 1);
+                    if p >= sel[idx] {
+                        p + 1
+                    } else {
+                        p
+                    }
+                };
                 stack.push((idx, sel[idx]));
                 sel[idx] = to;
             } else {
@@ -224,14 +234,26 @@ impl SocialDistance<'_> {
                 while idx1 != idx2 {
                     idx2 = rng.gen_range(0, bs_res.len());
                 }
-                let mut to1 = rng.gen_range(0, bs_res[idx1].len() - 1);
-                let mut to2 = rng.gen_range(0, bs_res[idx2].len() - 1);
-                if to1 >= sel[idx1] {
-                    to1 += 1;
-                }
-                if to2 >= sel[idx2] {
-                    to2 += 1;
-                }
+                let mut to1 = if bs_res[idx1].len() == 1 {
+                    0
+                } else {
+                    let p = rng.gen_range(0, bs_res[idx1].len() - 1);
+                    if p >= sel[idx1] {
+                        p + 1
+                    } else {
+                        p
+                    }
+                };
+                let mut to2 = if bs_res[idx2].len() == 1 {
+                    0
+                } else {
+                    let p = rng.gen_range(0, bs_res[idx2].len() - 1);
+                    if p >= sel[idx2] {
+                        p + 1
+                    } else {
+                        p
+                    }
+                };
                 stack.push((idx1, sel[idx1]));
                 stack.push((idx2, sel[idx2]));
                 sel[idx1] = to1;
@@ -246,7 +268,8 @@ impl SocialDistance<'_> {
 
             let updated = if prob >= rng.gen::<f64>() {
                 now_score = nex_score;
-                if now_score >= answer.0 {
+                if now_score > answer.0 {
+                    println!("updated: {} {} {} => {:?}", temp, elapsed, now_score, sel);
                     answer = (now_score, sel.clone());
                 }
                 true
@@ -260,9 +283,7 @@ impl SocialDistance<'_> {
                 }
             }
         }
-        println!("last:");
         self.calc_score(&bs_res, &answer.1, true);
-        println!("res:{} {:?}", answer.0, answer.1);
         answer.1
     }
     fn move_confirm(&self, acts: &mut Vec<Act>) {
@@ -451,7 +472,6 @@ impl SocialDistance<'_> {
                         }
                         _ => {
                             let act = Act::MoveAct(nex);
-                            println!("move: {:?} => {:?}", now_state.pos, nex);
                             if let Some(point) = self.calc_base(&now_state, &nex, &act) {
                                 Some((now_state.from(nex, act, point * pow(PER, t)), t + 1))
                             } else {
