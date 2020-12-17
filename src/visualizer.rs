@@ -102,6 +102,7 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
     make_button!(GreedySelect)(&mut flex, side);
     make_button!(SimpleDp)(&mut flex, side);
     make_button!(SimpleRegret)(&mut flex, side);
+    make_button!(SocialDistance)(&mut flex, side);
     flex.padding(10.).center()
 }
 

@@ -2,10 +2,11 @@ use crate::api::parse::TeamData;
 use druid::Data;
 use rand;
 use rand::Rng;
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::ops::Add;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Point {
     pub x: i8,
     pub y: i8,
@@ -15,6 +16,26 @@ pub struct Point {
 pub struct PointUsize {
     pub x: usize,
     pub y: usize,
+}
+
+impl PartialOrd for Point {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.x.eq(&other.x) {
+            self.y.partial_cmp(&other.y)
+        } else {
+            self.x.partial_cmp(&other.x)
+        }
+    }
+}
+
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.x.eq(&other.x) {
+            self.y.cmp(&other.y)
+        } else {
+            self.x.cmp(&other.x)
+        }
+    }
 }
 
 impl Point {

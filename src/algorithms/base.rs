@@ -67,14 +67,26 @@ pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
     primal_dual(side_, &prob, &field)
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
-struct MinOrdFloat(Reverse<OrderedFloat<f64>>);
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct MinOrdFloat(Reverse<OrderedFloat<f64>>);
 
 impl MinOrdFloat {
-    fn new(x: f64) -> MinOrdFloat {
+    pub fn new(x: f64) -> MinOrdFloat {
         MinOrdFloat(Reverse(OrderedFloat::<f64>::from(x)))
     }
-    fn raw(&self) -> f64 {
+    pub fn raw(&self) -> f64 {
+        (self.0).0.into()
+    }
+}
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct MaxOrdFloat(OrderedFloat<f64>);
+
+impl MaxOrdFloat {
+    pub fn new(x: f64) -> MaxOrdFloat {
+        MaxOrdFloat(OrderedFloat::<f64>::from(x))
+    }
+    pub fn raw(&self) -> f64 {
         (self.0).0.into()
     }
 }
