@@ -10,7 +10,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 
 const DEPTH: usize = 5;
-const WIDTH: usize = 30;
+const WIDTH: usize = 10;
 const PER: f64 = 0.7;
 const DIST_WEIGHT: f64 = 10.0;
 
@@ -150,7 +150,6 @@ impl SocialDistance<'_> {
         }
         res
     }
-
     fn reduce_cand(
         &self,
         dp_table: &Vec<Vec<DpState>>,
@@ -239,13 +238,11 @@ impl SocialDistance<'_> {
             .map(|x| x.1.clone())
             .collect::<Vec<_>>();
         selected.sort();
-        /*
         if t == DEPTH {
             for c in &selected {
                 println!("{}: {:?}", c.score.raw(), self.get_poses(c, t, dp_table));
             }
         }
-         */
         (selected, val)
     }
 
@@ -322,7 +319,6 @@ impl SocialDistance<'_> {
             let v = self.get_poses(&top, max_depth, &cand);
             res.push((score, act, v));
         }
-        res.reverse();
         res
     }
     fn calc_base(&self, now_state: &DpState, nex_pos: &Point, act: &Act) -> Option<f64> {
