@@ -5,14 +5,20 @@ use crate::simulator;
 use base::MinOrdFloat;
 use field::{Field, Point, State};
 use num_traits::pow;
+use rand::Rng;
 use simulator::Act;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
+use std::time::Instant;
 
 const DEPTH: usize = 5;
 const WIDTH: usize = 10;
 const PER: f64 = 0.7;
 const DIST_WEIGHT: f64 = 10.0;
+
+const START_TEMP: f64 = 3.0;
+const END_TEMP: f64 = 0.3;
+const SA_SEC: f64 = 1.0;
 
 const LCP_PER: f64 = 2.0;
 const LCP_POW: f64 = 2.0;
@@ -37,7 +43,6 @@ impl<'a> base::Solver<'a> for SocialDistance<'a> {
     fn solve(&mut self) -> Vec<Act> {
         let mut acts = vec![Act::StayAct; self.field.agent_count()];
         self.move_confirm(&mut acts);
-        self.put_confirm(&mut acts);
         acts
     }
 }
@@ -104,6 +109,79 @@ impl SocialDistance<'_> {
         }
         score
     }
+    fn calc_score(&self, bs_data: &Vec<Vec<(f64, Act, Vec<Point>)>>, sel: &Vec<usize>) -> f64 {
+        let acts = sel
+            .iter()
+            .zip(bs_data)
+            .map(|(idx, dat)| &dat[*idx])
+            .collect::<Vec<_>>();
+        acts.iter().fold(0.0, |b, x| b + x.0)
+    }
+    fn simulated_annealing(&self, bs_res: &Vec<Vec<(f64, Act, Vec<Point>)>>) -> Vec<usize> {
+        let mut sel = vec![0; self.field.agent_count()];
+        let mut now_score = self.calc_score(&bs_res, &sel);
+        let mut answer = (now_score, sel.clone());
+        let mut stack = Vec::new();
+        let start_time = Instant::now();
+        let mut rng = rand::thread_rng();
+        println!("loop start");
+        loop {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            if elapsed >= SA_SEC {
+                break;
+            }
+
+            if rng.gen::<f32>() <= 0.8 {
+                let idx = rng.gen_range(0, bs_res.len());
+                let mut to = rng.gen_range(0, bs_res[idx].len() - 1);
+                if to >= sel[idx] {
+                    to += 1;
+                }
+                stack.push((idx, sel[idx]));
+                sel[idx] = to;
+            } else {
+                let idx1 = rng.gen_range(0, bs_res.len());
+                let mut idx2 = idx1;
+                while idx1 != idx2 {
+                    idx2 = rng.gen_range(0, bs_res.len());
+                }
+                let mut to1 = rng.gen_range(0, bs_res[idx1].len() - 1);
+                let mut to2 = rng.gen_range(0, bs_res[idx2].len() - 1);
+                if to1 >= sel[idx1] {
+                    to1 += 1;
+                }
+                if to2 >= sel[idx2] {
+                    to2 += 1;
+                }
+                stack.push((idx1, sel[idx1]));
+                stack.push((idx2, sel[idx2]));
+                sel[idx1] = to1;
+                sel[idx2] = to2;
+            }
+
+            let nex_score = self.calc_score(&bs_res, &sel);
+            let temp = (END_TEMP - START_TEMP) * (start_time.elapsed().as_secs_f64() / SA_SEC)
+                + START_TEMP;
+            let prob = ((nex_score - now_score) / temp).exp();
+
+            let updated = if prob >= rng.gen::<f64>() {
+                now_score = nex_score;
+                if now_score >= answer.0 {
+                    answer = (now_score, sel.clone());
+                }
+                true
+            } else {
+                false
+            };
+            while !stack.is_empty() {
+                let (idx, sc) = stack.pop().unwrap();
+                if !updated {
+                    sel[idx] = sc;
+                }
+            }
+        }
+        sel
+    }
     fn move_confirm(&self, acts: &mut Vec<Act>) {
         let idxes = (0..self.field.agent_count())
             .filter(|id| {
@@ -119,17 +197,20 @@ impl SocialDistance<'_> {
             .map(|id| self.field.agent(self.side, *id).unwrap())
             .collect::<Vec<_>>();
 
+        let bs_res = poses
+            .iter()
+            .map(|x| self.beam_search(x.clone(), DEPTH))
+            .collect::<Vec<_>>();
+        let res = self.simulated_annealing(&bs_res);
+        for (i, bs_v) in bs_res.iter().enumerate() {
+            acts[idxes[i]] = bs_v[res[i]].1.clone();
+        }
+        /*
         for (i, pos) in poses.iter().enumerate() {
             let res = self.beam_search(pos.clone(), DEPTH);
             acts[idxes[i]] = res[0].1.clone();
         }
-    }
-    fn put_confirm(&self, acts: &mut Vec<Act>) {
-        let cnt = acts
-            .iter()
-            .filter(|act| **act == Act::StayAct)
-            .collect::<Vec<_>>()
-            .len();
+         */
     }
     fn get_poses(&self, state: &DpState, turn: usize, table: &Vec<Vec<DpState>>) -> Vec<Point> {
         let mut v = vec![None; turn + 1];
