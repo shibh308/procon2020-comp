@@ -12,7 +12,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Instant;
 
 const DEPTH: usize = 5;
-const WIDTH: usize = 10;
+const WIDTH: usize = 30;
 const PER: f64 = 0.7;
 
 const START_TEMP: f64 = 3.0;
@@ -20,6 +20,9 @@ const END_TEMP: f64 = 0.3;
 const SA_SEC: f64 = 0.3;
 
 const AG_CONF_PER: f64 = 0.3;
+
+const REGION_PER: f64 = 1.0;
+const REGION_POW: f64 = 0.9;
 
 const SA_LAST_PENA: f64 = 0.3;
 const SA_LAST_POW: f64 = 3.5;
@@ -131,6 +134,9 @@ impl SocialDistance<'_> {
             .map(|(i, x)| &bs_data[i][*x].2)
             .collect::<Vec<_>>();
 
+        let mut field = self.field.clone();
+        let init_region = field.score(self.side).region();
+
         let mut per_map = HashMap::new();
         let mut prev_per = vec![1.0; pos_data.len()];
         for j in 1..=DEPTH {
@@ -152,6 +158,19 @@ impl SocialDistance<'_> {
                     score -= SA_DIST_PENA * per_pow_dist * prev_per[idx1] * prev_per[idx2]
                         / f(p, q).max(0.5);
                 }
+            }
+
+            for pos in poses {
+                field.set_state(pos.usize(), State::Wall(self.side))
+            }
+            field.update_score();
+            field.update_region();
+            let region_diff = field.score(self.side).region() - init_region;
+            let region_score = REGION_PER * REGION_POW.powf((j - 1) as f64) * region_diff as f64;
+            score += region_score;
+            if output {
+                println!("region: {} {}", region_diff, region_score);
+                println!("{}", score);
             }
 
             for (i, pd) in pos_data.iter().enumerate() {
@@ -234,7 +253,7 @@ impl SocialDistance<'_> {
                 while idx1 != idx2 {
                     idx2 = rng.gen_range(0, bs_res.len());
                 }
-                let mut to1 = if bs_res[idx1].len() == 1 {
+                let to1 = if bs_res[idx1].len() == 1 {
                     0
                 } else {
                     let p = rng.gen_range(0, bs_res[idx1].len() - 1);
@@ -244,7 +263,7 @@ impl SocialDistance<'_> {
                         p
                     }
                 };
-                let mut to2 = if bs_res[idx2].len() == 1 {
+                let to2 = if bs_res[idx2].len() == 1 {
                     0
                 } else {
                     let p = rng.gen_range(0, bs_res[idx2].len() - 1);
@@ -305,6 +324,20 @@ impl SocialDistance<'_> {
             .iter()
             .map(|x| self.beam_search(x.clone(), DEPTH))
             .collect::<Vec<_>>();
+        println!(
+            "bs_res: {:?}",
+            bs_res
+                .iter()
+                .map(|x| {
+                    x.iter()
+                        .fold(HashSet::new(), |mut b, x| {
+                            b.insert(x.2[1].clone());
+                            b
+                        })
+                        .len()
+                })
+                .collect::<Vec<_>>()
+        );
         let res = self.simulated_annealing(&bs_res);
         for (i, bs_v) in bs_res.iter().enumerate() {
             acts[idxes[i]] = bs_v[res[i]].1.clone();
@@ -316,34 +349,9 @@ impl SocialDistance<'_> {
         }
          */
     }
-    /*
-    fn get_poses(&self, state: &DpState, turn: usize, table: &Vec<Vec<DpState>>) -> Vec<Point> {
-        let mut v = vec![None; turn + 1];
-        let mut top = state;
-        v[turn] = Some(top.pos);
-        let mut vp = Vec::new();
-        while top.prev_idx.is_some() {
-            let prev_turn = top.prev_turn.unwrap();
-            top = &table[prev_turn][top.prev_idx.unwrap()];
-            v[prev_turn] = Some(top.pos.clone());
-            vp.push(prev_turn);
-        }
-        println!("{:?}", vp);
-        let mut now = None;
-        let mut res = Vec::new();
-        for elm in v {
-            if elm.is_some() {
-                now = elm.clone();
-            }
-            res.push(now.unwrap());
-        }
-        res
-    }
-     */
     fn reduce_cand(
         &self,
         cand: &Vec<DpState>,
-        t: usize,
         lcp_per: f64,
         same_tile_per: f64,
     ) -> (Vec<DpState>, f64) {
@@ -351,12 +359,12 @@ impl SocialDistance<'_> {
 
         let mut h_map = BTreeSet::new();
         let mut pos_v: Vec<BTreeSet<Point>> = Vec::new();
+        let mut cn = 0;
 
         for state in cand {
             let mut score = state.score.raw();
 
-            let mut top = state;
-            let mut poses = vec![top.pos.clone()];
+            let poses = &state.poses;
             let mut poses_pref = Vec::new();
             let mut lcp = state.poses.len();
             for i in 0..state.poses.len() {
@@ -448,9 +456,9 @@ impl SocialDistance<'_> {
         cand[0][0].used.insert(start_pos);
         for t in 0..max_depth {
             cand[t].sort();
-            let (bef, _) = self.reduce_cand(&cand[t], t, LCP_PER, SAME_TILE_PER);
+            let (bef, _) = self.reduce_cand(&cand[t], LCP_PER, SAME_TILE_PER);
             cand[t] = bef.clone();
-            for (idx, now_state) in bef.iter().enumerate() {
+            for now_state in bef {
                 let neighbors = base::make_neighbors(now_state.pos, self.field);
                 for nex in neighbors {
                     let tile = self.field.tile(nex.usize());
@@ -484,8 +492,7 @@ impl SocialDistance<'_> {
                 }
             }
         }
-        let (final_res, average) =
-            self.reduce_cand(&cand[max_depth], max_depth, LCP_PER, SAME_TILE_PER);
+        let (final_res, average) = self.reduce_cand(&cand[max_depth], LCP_PER, SAME_TILE_PER);
         cand[max_depth] = final_res.clone();
         // println!("avl: {}", average);
         let mut res = Vec::new();
