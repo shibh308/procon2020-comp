@@ -2,6 +2,7 @@ use super::base;
 use crate::field;
 use crate::simulator;
 
+use crate::field::PointUsize;
 use base::MinOrdFloat;
 use field::{Field, Point, State};
 use num_traits::pow;
@@ -13,7 +14,10 @@ use std::time::Instant;
 
 const DEPTH: usize = 5;
 const WIDTH: usize = 30;
+const PUT_WIDTH: usize = 5;
 const PER: f64 = 0.7;
+
+const PUT_BORDER: f64 = 0.3;
 
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
@@ -23,6 +27,8 @@ const AG_CONF_PER: f64 = 0.3;
 
 const REGION_PER: f64 = 1.0;
 const REGION_POW: f64 = 0.9;
+
+const PUT_CONF_POW: f64 = 0.7;
 
 const SA_LAST_PENA: f64 = 0.3;
 const SA_LAST_POW: f64 = 3.5;
@@ -235,7 +241,7 @@ impl SocialDistance<'_> {
 
             if bs_res.len() <= 1 || rng.gen::<f32>() <= 0.8 {
                 let idx = rng.gen_range(0, bs_res.len());
-                let mut to = if bs_res[idx].len() == 1 {
+                let to = if bs_res[idx].len() == 1 {
                     0
                 } else {
                     let p = rng.gen_range(0, bs_res[idx].len() - 1);
@@ -315,51 +321,115 @@ impl SocialDistance<'_> {
                 }
             })
             .collect::<Vec<_>>();
-        let poses = idxes
-            .iter()
-            .map(|id| self.field.agent(self.side, *id).unwrap())
+        let mut move_pos_list = Vec::new();
+        if !idxes.is_empty() {
+            let poses = idxes
+                .iter()
+                .map(|id| self.field.agent(self.side, *id).unwrap())
+                .collect::<Vec<_>>();
+
+            let bs_res = poses
+                .iter()
+                .map(|x| self.beam_search(x.clone(), DEPTH, WIDTH))
+                .collect::<Vec<_>>();
+            /*
+            println!(
+                "bs_res: {:?}",
+                bs_res
+                    .iter()
+                    .map(|x| {
+                        x.iter()
+                            .fold(HashSet::new(), |mut b, x| {
+                                b.insert(x.2[1].clone());
+                                b
+                            })
+                            .len()
+                    })
+                    .collect::<Vec<_>>()
+            );
+             */
+            let res = self.simulated_annealing(&bs_res);
+            for (i, bs_v) in bs_res.iter().enumerate() {
+                move_pos_list.push(bs_v[res[i]].2.iter().map(|x| x.usize()).collect::<Vec<_>>());
+                acts[idxes[i]] = bs_v[res[i]].1.clone();
+            }
+        }
+        // 多始点BFSでうまく管理する
+        let st = Instant::now();
+
+        let mut per = (0..self.field.width())
+            .map(|_| vec![1.0; self.field.height()])
             .collect::<Vec<_>>();
 
-        let bs_res = poses
-            .iter()
-            .map(|x| self.beam_search(x.clone(), DEPTH))
-            .collect::<Vec<_>>();
+        for j in 1..=DEPTH {
+            let per_pow = PUT_CONF_POW.powf((j - 1) as f64);
+            for moves in &move_pos_list {
+                per[moves[j].x][moves[j].y] *= 1.0 - per_pow;
+            }
+        }
+
+        let score_func = |x, y| {
+            let tile = self.field.tile(PointUsize::new(x, y));
+            match tile.state() {
+                State::Wall(side) if side != self.side => -20.0,
+                _ => tile.point() as f64 * per[x][y],
+            }
+        };
+
+        let (cand_list, border) = {
+            let mut res = (0..self.field.width()).fold(Vec::new(), |mut v, i| {
+                let mut w = (0..self.field.height()).fold(Vec::new(), |mut u, j| {
+                    let score = score_func(i, j);
+                    u.push(score);
+                    u
+                });
+                v.append(&mut w);
+                v
+            });
+            let res = {
+                let mut res_f = res.iter().map(|x| MinOrdFloat::new(*x)).collect::<Vec<_>>();
+                res_f.sort();
+                res_f.iter().map(|x| x.raw()).collect::<Vec<_>>()
+            };
+            println!("{:?}", res);
+            let border = res[((res.len() as f64 * PUT_BORDER) as usize).min(res.len() - 1)];
+            (
+                (0..self.field.width()).fold(HashSet::new(), |v, i| {
+                    let mut w = (0..self.field.height()).fold(HashSet::new(), |mut u, j| {
+                        if score_func(i, j) >= border {
+                            u.insert(PointUsize::new(i, j).normal());
+                        }
+                        u
+                    });
+                    v.union(&w).cloned().collect::<HashSet<_>>()
+                }),
+                border,
+            )
+        };
+        for p in &cand_list {
+            self.beam_search(p.clone(), DEPTH - 1, PUT_WIDTH);
+        }
         println!(
-            "bs_res: {:?}",
-            bs_res
-                .iter()
-                .map(|x| {
-                    x.iter()
-                        .fold(HashSet::new(), |mut b, x| {
-                            b.insert(x.2[1].clone());
-                            b
-                        })
-                        .len()
-                })
-                .collect::<Vec<_>>()
+            "cand:{}, {} * {}",
+            cand_list.len(),
+            self.field.width(),
+            self.field.height()
         );
-        let res = self.simulated_annealing(&bs_res);
-        for (i, bs_v) in bs_res.iter().enumerate() {
-            acts[idxes[i]] = bs_v[res[i]].1.clone();
-        }
-        /*
-        for (i, pos) in poses.iter().enumerate() {
-            let res = self.beam_search(pos.clone(), DEPTH);
-            acts[idxes[i]] = res[0].1.clone();
-        }
-         */
+        println!("border: {}", border);
+        println!("time: {} [msec]", st.elapsed().as_millis());
     }
     fn reduce_cand(
         &self,
         cand: &Vec<DpState>,
         lcp_per: f64,
         same_tile_per: f64,
-    ) -> (Vec<DpState>, f64) {
+        depth: usize,
+        width: usize,
+    ) -> Vec<DpState> {
         let mut res = Vec::new();
 
         let mut h_map = BTreeSet::new();
         let mut pos_v: Vec<BTreeSet<Point>> = Vec::new();
-        let mut cn = 0;
 
         for state in cand {
             let mut score = state.score.raw();
@@ -382,7 +452,7 @@ impl SocialDistance<'_> {
                 .collect::<Vec<_>>();
 
             // lcpがuniqueだとボーナスが入る
-            let lcp_bonus = lcp_per * ((DEPTH + 1 - lcp.max(1)) as f64).powf(LCP_POW);
+            let lcp_bonus = lcp_per * ((depth + 1 - lcp.max(1)) as f64).powf(LCP_POW);
             let average_tile_conf = if hs_vec.is_empty() {
                 0.0
             } else {
@@ -407,7 +477,7 @@ impl SocialDistance<'_> {
             res.push((MinOrdFloat::new(score), state.clone(), lcp));
 
             /*
-            if t == DEPTH {
+            if t == depth {
                 println!(
                     "{} => {}  [{}, -{}]",
                     state.score.raw(),
@@ -419,10 +489,9 @@ impl SocialDistance<'_> {
              */
         }
         res.sort();
-        let siz = res.len().min(WIDTH);
-        let val = res.iter().take(siz).fold(0.0, |b, x| b + x.2 as f64) / (siz as f64);
+        let siz = res.len().min(width);
         /*
-        if t == DEPTH {
+        if t == depth {
             for c in res.iter().take(siz) {
                 println!("x.2: {}", c.2);
             }
@@ -434,17 +503,22 @@ impl SocialDistance<'_> {
             .map(|x| x.1.clone())
             .collect::<Vec<_>>();
         selected.sort();
+        selected
         /*
-        if t == DEPTH {
+        if t == depth {
             for c in &selected {
                 println!("{}: {:?}", c.score.raw(), self.get_poses(c, t, dp_table));
             }
         }
          */
-        (selected, val)
     }
 
-    fn beam_search(&self, start_pos: Point, max_depth: usize) -> Vec<(f64, Act, Vec<Point>)> {
+    fn beam_search(
+        &self,
+        start_pos: Point,
+        max_depth: usize,
+        width: usize,
+    ) -> Vec<(f64, Act, Vec<Point>)> {
         let mut cand = vec![Vec::new(); max_depth + 1];
         cand[0].push(DpState {
             score: MinOrdFloat::new(0.0),
@@ -456,7 +530,7 @@ impl SocialDistance<'_> {
         cand[0][0].used.insert(start_pos);
         for t in 0..max_depth {
             cand[t].sort();
-            let (bef, _) = self.reduce_cand(&cand[t], LCP_PER, SAME_TILE_PER);
+            let bef = self.reduce_cand(&cand[t], LCP_PER, SAME_TILE_PER, max_depth, width);
             cand[t] = bef.clone();
             for now_state in bef {
                 let neighbors = base::make_neighbors(now_state.pos, self.field);
@@ -492,7 +566,8 @@ impl SocialDistance<'_> {
                 }
             }
         }
-        let (final_res, average) = self.reduce_cand(&cand[max_depth], LCP_PER, SAME_TILE_PER);
+        let final_res =
+            self.reduce_cand(&cand[max_depth], LCP_PER, SAME_TILE_PER, max_depth, width);
         cand[max_depth] = final_res.clone();
         // println!("avl: {}", average);
         let mut res = Vec::new();

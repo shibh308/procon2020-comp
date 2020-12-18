@@ -44,7 +44,7 @@ pub fn solve_regret_matching<'a, T: Solver<'a> + EachEvalSolver>(
     let solver = [false, true]
         .iter()
         .map(|side| {
-            let mut sol = T::new(false, field);
+            let mut sol = T::new(*side, field);
             sol.solve();
             sol
         })
@@ -260,7 +260,7 @@ fn regret_matching(
     let mut rng = rand::thread_rng();
     let agent_count = field.agent_count();
 
-    let mut calc_prob = |regret: &Vec<Vec<HashMap<Act, f64>>>| -> Vec<Vec<HashMap<Act, f64>>> {
+    let calc_prob = |regret: &Vec<Vec<HashMap<Act, f64>>>| -> Vec<Vec<HashMap<Act, f64>>> {
         let regret_sum: Vec<Vec<f64>> = regret
             .iter()
             .map(|v| {
@@ -392,7 +392,7 @@ fn regret_matching(
         for id in 0..agent_count {
             println!(
                 "max: {}",
-                lm[id].iter().fold(0.0, |now: f64, (k, v)| now.max(*v))
+                lm[id].iter().fold(0.0, |now: f64, (_, v)| now.max(*v))
             );
         }
         println!("");
