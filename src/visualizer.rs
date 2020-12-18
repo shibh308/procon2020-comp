@@ -8,6 +8,7 @@ use druid::{Env, Event, EventCtx};
 
 use crate::algorithms;
 use crate::algorithms::Solver;
+use crate::api::{parse, request};
 use crate::field;
 use crate::simulator;
 use crate::simulator::Simulator;
@@ -73,6 +74,7 @@ enum ClickedElement {
 #[derive(Clone, Data)]
 pub struct AppData {
     pub simulator: simulator::Simulator,
+    pub config: parse::Config,
 }
 
 macro_rules! make_button {
@@ -103,6 +105,22 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
     make_button!(SimpleDp)(&mut flex, side);
     make_button!(SimpleRegret)(&mut flex, side);
     make_button!(SocialDistance)(&mut flex, side);
+
+    if !side {
+        flex.add_spacer(20.);
+        flex.add_flex_child(
+            druid::widget::Button::new("MatchData").on_click(
+                move |_ctx, data: &mut AppData, _env| match request::get_match_data(&data.config) {
+                    Ok(res) => {
+                        println!("{:?}", res);
+                    }
+                    Err(res) => panic!(res),
+                },
+            ),
+            1.0,
+        );
+        flex.add_spacer(10.);
+    }
     flex.padding(10.).center()
 }
 
@@ -113,6 +131,7 @@ pub fn ui_builder() -> impl Widget<AppData> {
     flex.add_flex_child(GameWidget::new(), 3.0);
     flex.add_spacer(10.);
     flex.add_flex_child(make_side_ui(true), 0.2);
+    flex.add_spacer(10.);
     flex.background(get_color(ColorData::Bg).clone())
 }
 

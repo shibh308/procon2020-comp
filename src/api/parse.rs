@@ -1,7 +1,10 @@
 use crate::field;
 
+use druid::Data;
 use field::Field;
+use serde::Deserialize;
 use serde_json::Value;
+use std::fs::File;
 use try_from::TryFrom;
 
 fn to_result<T: Clone>(opt: Option<T>, target: &str) -> Result<T, String> {
@@ -11,13 +14,13 @@ fn to_result<T: Clone>(opt: Option<T>, target: &str) -> Result<T, String> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TeamData {
     pub team_id: u32,
     pub agent_id: Vec<u32>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MatchData {
     pub match_id: u32,
     pub final_turn: u32,
@@ -27,6 +30,13 @@ pub struct MatchData {
 pub struct FieldData {
     pub field: Field,
     pub teams: Vec<TeamData>,
+}
+
+#[derive(Clone, Debug, Deserialize, Data)]
+pub struct Config {
+    pub id: usize,
+    pub token: String,
+    pub url: String,
 }
 
 macro_rules! err_ret {
@@ -171,4 +181,11 @@ pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String>
         field,
         teams: team_data,
     })
+}
+
+pub fn read_config_json(path: &str) -> Config {
+    let mut fp = File::open(path).expect("file not found");
+    let res = serde_json::from_reader(fp).expect("config parse error");
+    println!("{:?}", res);
+    res
 }
