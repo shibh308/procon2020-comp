@@ -15,7 +15,9 @@ use std::time::Instant;
 const DEPTH: usize = 5;
 const WIDTH: usize = 30;
 const PUT_WIDTH: usize = 5;
-const PER: f64 = 0.7;
+const PER: f64 = 0.6;
+
+const FIRST_MOVE_PER: f64 = 1.0;
 
 const PUT_BORDER: f64 = 0.3;
 
@@ -34,7 +36,7 @@ const SA_LAST_PENA: f64 = 0.3;
 const SA_LAST_POW: f64 = 3.5;
 const SA_LAST_SUPER_PENA: f64 = 2.5;
 const SA_LAST_SUPER_BORDER: f64 = 0.25;
-const SA_CONF_PER: f64 = 0.7;
+const SA_CONF_PER: f64 = 0.6;
 const SA_CONF_PENA: f64 = 3.5;
 const SA_DIST_PENA: f64 = 30.0;
 const SA_DIST_POW: f64 = 0.4;
@@ -132,7 +134,13 @@ impl SocialDistance<'_> {
             .zip(bs_data)
             .map(|(idx, dat)| &dat[*idx])
             .collect::<Vec<_>>();
-        let mut score = acts.iter().fold(0.0, |b, x| b + x.0);
+        let mut score = acts.iter().fold(0.0, |b, x| {
+            b + x.0
+                + self
+                    .calc_base(&HashSet::new(), &x.2[1], &x.1)
+                    .unwrap_or(-10000.0)
+                    * FIRST_MOVE_PER
+        });
 
         let pos_data = sel
             .iter()
@@ -539,7 +547,7 @@ impl SocialDistance<'_> {
                     if let Some((nex_state, nex_turn)) = match tile.state() {
                         State::Wall(side_) if self.side != side_ => {
                             let act = Act::RemoveAct(nex);
-                            if let Some(point) = self.calc_base(&now_state, &nex, &act) {
+                            if let Some(point) = self.calc_base(&now_state.used, &nex, &act) {
                                 if t == max_depth - 1 {
                                     Some((now_state.from(nex, act, point * pow(PER, t)), t + 1))
                                 } else {
@@ -554,7 +562,7 @@ impl SocialDistance<'_> {
                         }
                         _ => {
                             let act = Act::MoveAct(nex);
-                            if let Some(point) = self.calc_base(&now_state, &nex, &act) {
+                            if let Some(point) = self.calc_base(&now_state.used, &nex, &act) {
                                 Some((now_state.from(nex, act, point * pow(PER, t)), t + 1))
                             } else {
                                 None
@@ -580,9 +588,9 @@ impl SocialDistance<'_> {
         }
         res
     }
-    fn calc_base(&self, now_state: &DpState, nex_pos: &Point, act: &Act) -> Option<f64> {
+    fn calc_base(&self, used: &HashSet<Point>, nex_pos: &Point, act: &Act) -> Option<f64> {
         match base::point(self.side, act.clone(), self.field) {
-            Some(point) => Some(if now_state.used.contains(nex_pos) {
+            Some(point) => Some(if used.contains(nex_pos) {
                 0.0
             } else {
                 point as f64
