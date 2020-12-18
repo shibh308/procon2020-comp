@@ -14,12 +14,16 @@ use std::time::Instant;
 
 const DEPTH: usize = 5;
 const WIDTH: usize = 30;
-const PUT_WIDTH: usize = 5;
+const PUT_WIDTH: usize = 60;
 const PER: f64 = 0.6;
 
 const FIRST_MOVE_PER: f64 = 1.0;
 
 const PUT_BORDER: f64 = 0.3;
+
+const PUT_START_TEMP: f64 = 3.0;
+const PUT_END_TEMP: f64 = 0.3;
+const PUT_SA_SEC: f64 = 0.3;
 
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
@@ -234,6 +238,7 @@ impl SocialDistance<'_> {
         }
         score
     }
+
     fn simulated_annealing(&self, bs_res: &Vec<Vec<(f64, Act, Vec<Point>)>>) -> Vec<usize> {
         let mut sel = vec![0; bs_res.len()];
         let mut now_score = self.calc_score(&bs_res, &sel, false);
@@ -320,14 +325,18 @@ impl SocialDistance<'_> {
         answer.1
     }
     fn move_confirm(&self, acts: &mut Vec<Act>) {
+        let check_fn = |id: usize| {
+            if let Some(_) = self.field.agent(self.side, id) {
+                true
+            } else {
+                false
+            }
+        };
         let idxes = (0..self.field.agent_count())
-            .filter(|id| {
-                if let Some(_) = self.field.agent(self.side, *id) {
-                    true
-                } else {
-                    false
-                }
-            })
+            .filter(|id| check_fn(*id))
+            .collect::<Vec<_>>();
+        let put_idxes = (0..self.field.agent_count())
+            .filter(|id| !check_fn(*id))
             .collect::<Vec<_>>();
         let mut move_pos_list = Vec::new();
         if !idxes.is_empty() {
@@ -338,7 +347,7 @@ impl SocialDistance<'_> {
 
             let bs_res = poses
                 .iter()
-                .map(|x| self.beam_search(x.clone(), DEPTH, WIDTH))
+                .map(|x| self.beam_search(vec![x.clone()], DEPTH, WIDTH))
                 .collect::<Vec<_>>();
             /*
             println!(
@@ -414,8 +423,14 @@ impl SocialDistance<'_> {
                 border,
             )
         };
-        for p in &cand_list {
-            self.beam_search(p.clone(), DEPTH - 1, PUT_WIDTH);
+        let put_bs_res = self.beam_search(
+            cand_list.iter().cloned().collect::<Vec<_>>(),
+            DEPTH - 1,
+            PUT_WIDTH,
+        );
+        let put_res = self.put_simulated_annealing(put_idxes.len(), &move_pos_list, &put_bs_res);
+        for (i, idx) in put_res.iter().enumerate() {
+            acts[put_idxes[i]] = put_bs_res[*idx].1.clone();
         }
         println!(
             "cand:{}, {} * {}",
@@ -425,6 +440,14 @@ impl SocialDistance<'_> {
         );
         println!("border: {}", border);
         println!("time: {} [msec]", st.elapsed().as_millis());
+    }
+    fn put_simulated_annealing(
+        &self,
+        n: usize,
+        move_pos_list: &Vec<Vec<PointUsize>>,
+        bs_res: &Vec<(f64, Act, Vec<Point>)>,
+    ) -> Vec<usize> {
+        (0..n).collect::<Vec<_>>()
     }
     fn reduce_cand(
         &self,
@@ -523,19 +546,21 @@ impl SocialDistance<'_> {
 
     fn beam_search(
         &self,
-        start_pos: Point,
+        start_poses: Vec<Point>,
         max_depth: usize,
         width: usize,
     ) -> Vec<(f64, Act, Vec<Point>)> {
         let mut cand = vec![Vec::new(); max_depth + 1];
-        cand[0].push(DpState {
-            score: MinOrdFloat::new(0.0),
-            pos: start_pos,
-            act: Act::StayAct,
-            used: HashSet::new(),
-            poses: vec![start_pos.clone()],
-        });
-        cand[0][0].used.insert(start_pos);
+        for (i, start_pos) in start_poses.iter().enumerate() {
+            cand[0].push(DpState {
+                score: MinOrdFloat::new(0.0),
+                pos: start_pos.clone(),
+                act: Act::StayAct,
+                used: HashSet::new(),
+                poses: vec![start_pos.clone()],
+            });
+            cand[0][i].used.insert(start_pos.clone());
+        }
         for t in 0..max_depth {
             cand[t].sort();
             let bef = self.reduce_cand(&cand[t], LCP_PER, SAME_TILE_PER, max_depth, width);
