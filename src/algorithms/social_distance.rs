@@ -17,7 +17,7 @@ const WIDTH: usize = 30;
 const PUT_WIDTH: usize = 60;
 const PER: f64 = 0.6;
 
-const FIRST_MOVE_PER: f64 = 1.0;
+const FIRST_MOVE_BONUS: f64 = 1.0;
 
 const PUT_BORDER: f64 = 0.3;
 
@@ -54,6 +54,20 @@ pub struct SocialDistance<'a> {
     field: &'a Field,
     agent_set: HashSet<Point>,
     side: bool,
+}
+
+enum SaRes {
+    Normal(Vec<Vec<(f64, Act, Vec<Point>)>>),
+    Put((Vec<(f64, Act, Vec<Point>)>, Vec<(f64, Act, Vec<Point>)>)),
+}
+
+impl SaRes {
+    fn len(self) -> usize {
+        match self {
+            SaRes::Normal(x) => x.len(),
+            SaRes::Put((x, _)) => x.len(),
+        }
+    }
 }
 
 impl<'a> base::Solver<'a> for SocialDistance<'a> {
@@ -127,7 +141,7 @@ impl DpState {
 }
 
 impl SocialDistance<'_> {
-    fn calc_score(
+    fn calc_score_normal(
         &self,
         bs_data: &Vec<Vec<(f64, Act, Vec<Point>)>>,
         sel: &Vec<usize>,
@@ -143,7 +157,7 @@ impl SocialDistance<'_> {
                 + self
                     .calc_base(&HashSet::new(), &x.2[1], &x.1)
                     .unwrap_or(-10000.0)
-                    * FIRST_MOVE_PER
+                    * FIRST_MOVE_BONUS
         });
 
         let pos_data = sel
@@ -239,9 +253,87 @@ impl SocialDistance<'_> {
         score
     }
 
-    fn simulated_annealing(&self, bs_res: &Vec<Vec<(f64, Act, Vec<Point>)>>) -> Vec<usize> {
-        let mut sel = vec![0; bs_res.len()];
-        let mut now_score = self.calc_score(&bs_res, &sel, false);
+    fn calc_score_put(
+        &self,
+        bs_data: &Vec<(f64, Act, Vec<Point>)>,
+        pos_data: &Vec<(f64, Act, Vec<Point>)>,
+        sel: &Vec<usize>,
+        output: bool,
+    ) -> f64 {
+        let mut poses = sel
+            .iter()
+            .map(|i| bs_data[*i].2.clone())
+            .collect::<Vec<_>>();
+        poses.append(
+            &mut pos_data
+                .iter()
+                .map(|x| x.2.iter().skip(1).cloned().collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+        );
+        let mut scores = bs_data.iter().map(|x| x.0).collect::<Vec<_>>();
+        scores.append(&mut pos_data.iter().map(|x| x.0).collect::<Vec<_>>());
+        let n = poses.len();
+        let mut prob = vec![1.0; n];
+        let mut per_map = (0..self.field.width())
+            .map(|_| vec![1.0; self.field.height()])
+            .collect::<Vec<_>>();
+
+        let bonus_score = poses
+            .iter()
+            .fold(0.0, |b, x| b + self.field.tile(x[1].usize()).point() as f64)
+            * FIRST_MOVE_BONUS;
+
+        for j in 0..DEPTH {
+            let per_pow = SA_CONF_PER.powf(j as f64);
+            for (i, pd) in poses.iter().enumerate() {
+                let pos = pd[j].usize();
+                // 到達確率
+                let per = if j != 0 && pd[j - 1] == pd[j] {
+                    1.0
+                } else {
+                    // マスが踏まれている確率を更新していく
+                    let bef_val = per_map[pos.x][pos.y];
+                    per_map[pos.x][pos.y] = bef_val * (1.0 - prob[i] * per_pow);
+                    bef_val
+                } * prob[i];
+                prob[i] = per;
+                if j == 0 && prob[i] != 1.0 {
+                    return -10000.0;
+                }
+            }
+        }
+        let res = prob
+            .iter()
+            .enumerate()
+            .fold(0.0, |b, (idx, x)| b + scores[idx] * x)
+            + bonus_score;
+
+        if output {
+            println!("{:?}", prob);
+            println!("answer: {}", res);
+        }
+        res
+    }
+
+    fn calc_score(&self, bs_res: &SaRes, sel: &Vec<usize>, output: bool) -> f64 {
+        match bs_res {
+            SaRes::Normal(x) => self.calc_score_normal(&x, sel, output),
+            SaRes::Put((x, y)) => self.calc_score_put(x, y, sel, output),
+        }
+    }
+
+    fn simulated_annealing(&self, n: usize, bs_res: &SaRes, siz_vec: Vec<usize>) -> Vec<usize> {
+        let put_fl = if let SaRes::Put(_) = bs_res {
+            true
+        } else {
+            false
+        };
+        let mut sel = if put_fl {
+            (0..n).collect::<Vec<_>>()
+        } else {
+            vec![0; n]
+        };
+        let mut now_score = self.calc_score(bs_res, &sel, false);
         let mut answer = (now_score, sel.clone());
         let mut stack = Vec::new();
         let start_time = Instant::now();
@@ -252,12 +344,12 @@ impl SocialDistance<'_> {
                 break;
             }
 
-            if bs_res.len() <= 1 || rng.gen::<f32>() <= 0.8 {
-                let idx = rng.gen_range(0, bs_res.len());
-                let to = if bs_res[idx].len() == 1 {
+            if n <= 1 || rng.gen::<f32>() <= 0.8 {
+                let idx = rng.gen_range(0, n);
+                let to = if siz_vec[idx] == 1 {
                     0
                 } else {
-                    let p = rng.gen_range(0, bs_res[idx].len() - 1);
+                    let p = rng.gen_range(0, siz_vec[idx] - 1);
                     if p >= sel[idx] {
                         p + 1
                     } else {
@@ -267,25 +359,25 @@ impl SocialDistance<'_> {
                 stack.push((idx, sel[idx]));
                 sel[idx] = to;
             } else {
-                let idx1 = rng.gen_range(0, bs_res.len());
+                let idx1 = rng.gen_range(0, n);
                 let mut idx2 = idx1;
                 while idx1 != idx2 {
-                    idx2 = rng.gen_range(0, bs_res.len());
+                    idx2 = rng.gen_range(0, n);
                 }
-                let to1 = if bs_res[idx1].len() == 1 {
+                let to1 = if siz_vec[idx1] == 1 {
                     0
                 } else {
-                    let p = rng.gen_range(0, bs_res[idx1].len() - 1);
+                    let p = rng.gen_range(0, siz_vec[idx1] - 1);
                     if p >= sel[idx1] {
                         p + 1
                     } else {
                         p
                     }
                 };
-                let to2 = if bs_res[idx2].len() == 1 {
+                let to2 = if siz_vec[idx2] == 1 {
                     0
                 } else {
-                    let p = rng.gen_range(0, bs_res[idx2].len() - 1);
+                    let p = rng.gen_range(0, siz_vec[idx2] - 1);
                     if p >= sel[idx2] {
                         p + 1
                     } else {
@@ -307,7 +399,7 @@ impl SocialDistance<'_> {
             let updated = if prob >= rng.gen::<f64>() {
                 now_score = nex_score;
                 if now_score > answer.0 {
-                    println!("updated: {} {} {} => {:?}", temp, elapsed, now_score, sel);
+                    // println!("updated: {} {} {} => {:?}", temp, elapsed, now_score, sel);
                     answer = (now_score, sel.clone());
                 }
                 true
@@ -321,7 +413,7 @@ impl SocialDistance<'_> {
                 }
             }
         }
-        self.calc_score(&bs_res, &answer.1, true);
+        // self.calc_score(&bs_res, &answer.1, true);
         answer.1
     }
     fn move_confirm(&self, acts: &mut Vec<Act>) {
@@ -339,37 +431,49 @@ impl SocialDistance<'_> {
             .filter(|id| !check_fn(*id))
             .collect::<Vec<_>>();
         let mut move_pos_list = Vec::new();
-        if !idxes.is_empty() {
-            let poses = idxes
-                .iter()
-                .map(|id| self.field.agent(self.side, *id).unwrap())
-                .collect::<Vec<_>>();
+        let poses = idxes
+            .iter()
+            .map(|id| self.field.agent(self.side, *id).unwrap())
+            .collect::<Vec<_>>();
 
-            let bs_res = poses
+        let bs_res = poses
+            .iter()
+            .map(|x| self.beam_search(vec![x.clone()], DEPTH, WIDTH))
+            .collect::<Vec<_>>();
+        /*
+        println!(
+            "bs_res: {:?}",
+            bs_res
                 .iter()
-                .map(|x| self.beam_search(vec![x.clone()], DEPTH, WIDTH))
-                .collect::<Vec<_>>();
-            /*
-            println!(
-                "bs_res: {:?}",
-                bs_res
-                    .iter()
-                    .map(|x| {
-                        x.iter()
-                            .fold(HashSet::new(), |mut b, x| {
-                                b.insert(x.2[1].clone());
-                                b
-                            })
-                            .len()
-                    })
-                    .collect::<Vec<_>>()
+                .map(|x| {
+                    x.iter()
+                        .fold(HashSet::new(), |mut b, x| {
+                            b.insert(x.2[1].clone());
+                            b
+                        })
+                        .len()
+                })
+                .collect::<Vec<_>>()
+        );
+         */
+        let selected_bs_res = if bs_res.is_empty() {
+            Vec::new()
+        } else {
+            let res = self.simulated_annealing(
+                bs_res.len(),
+                &SaRes::Normal(bs_res.clone()),
+                bs_res.iter().map(|x| x.len()).collect::<Vec<_>>(),
             );
-             */
-            let res = self.simulated_annealing(&bs_res);
+            let mut selected_bs_res = Vec::new();
             for (i, bs_v) in bs_res.iter().enumerate() {
                 move_pos_list.push(bs_v[res[i]].2.iter().map(|x| x.usize()).collect::<Vec<_>>());
+                selected_bs_res.push(bs_v[res[i]].clone());
                 acts[idxes[i]] = bs_v[res[i]].1.clone();
             }
+            selected_bs_res
+        };
+        if put_idxes.is_empty() {
+            return;
         }
         // 多始点BFSでうまく管理する
         let st = Instant::now();
@@ -408,7 +512,6 @@ impl SocialDistance<'_> {
                 res_f.sort();
                 res_f.iter().map(|x| x.raw()).collect::<Vec<_>>()
             };
-            println!("{:?}", res);
             let border = res[((res.len() as f64 * PUT_BORDER) as usize).min(res.len() - 1)];
             (
                 (0..self.field.width()).fold(HashSet::new(), |v, i| {
@@ -428,10 +531,20 @@ impl SocialDistance<'_> {
             DEPTH - 1,
             PUT_WIDTH,
         );
-        let put_res = self.put_simulated_annealing(put_idxes.len(), &move_pos_list, &put_bs_res);
+        let put_res = self.simulated_annealing(
+            put_idxes.len(),
+            &SaRes::Put((put_bs_res.clone(), selected_bs_res)),
+            vec![put_bs_res.len(); put_idxes.len()],
+        );
         for (i, idx) in put_res.iter().enumerate() {
-            acts[put_idxes[i]] = put_bs_res[*idx].1.clone();
+            let act = if let Act::MoveAct(p) = put_bs_res[*idx].1 {
+                Act::PutAct(p)
+            } else {
+                Act::StayAct
+            };
+            acts[put_idxes[i]] = act;
         }
+        /*
         println!(
             "cand:{}, {} * {}",
             cand_list.len(),
@@ -440,14 +553,7 @@ impl SocialDistance<'_> {
         );
         println!("border: {}", border);
         println!("time: {} [msec]", st.elapsed().as_millis());
-    }
-    fn put_simulated_annealing(
-        &self,
-        n: usize,
-        move_pos_list: &Vec<Vec<PointUsize>>,
-        bs_res: &Vec<(f64, Act, Vec<Point>)>,
-    ) -> Vec<usize> {
-        (0..n).collect::<Vec<_>>()
+         */
     }
     fn reduce_cand(
         &self,
@@ -608,7 +714,6 @@ impl SocialDistance<'_> {
             let top = top_res.clone();
             let score = top.score.raw();
             let act = top.act.clone();
-            println!("poses: {:?}", top.poses);
             res.push((score, act, top.poses));
         }
         res
