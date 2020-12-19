@@ -26,7 +26,7 @@ def func(trial):
 
 def run():
     study = optuna.load_study(study_name="opt_study", storage="sqlite:///./opt_study.db")
-    study.optimize(func, n_trials=5)
+    study.optimize(func, n_trials=500)
 
 def main():
     with open("./data/params_default.json") as f:
@@ -36,7 +36,6 @@ def main():
     study = optuna.create_study(study_name="opt_study", direction="maximize", storage="sqlite:///./opt_study.db", load_if_exists="True")
 
     Parallel(n_jobs=12)([delayed(run)() for _ in range(12)])
-    print(study.best_value, study.best_params)
 
 if __name__ == '__main__':
     main()
