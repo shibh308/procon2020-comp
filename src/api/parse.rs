@@ -89,7 +89,6 @@ where
 }
 
 fn get_team_data(teams: &Vec<Value>) -> Result<Vec<TeamData>, String> {
-    println!("teams: {:?}", teams);
     let team_data = (0..2)
         .map(|i| {
             let id = to_result(teams[i]["teamID"].as_u64(), &format!("teams[{}].teamID", i));
@@ -193,6 +192,5 @@ pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String>
 pub fn read_config_json(path: &str) -> Config {
     let fp = File::open(path).expect("file not found");
     let res = serde_json::from_reader(fp).expect("config parse error");
-    println!("{:?}", res);
     res
 }

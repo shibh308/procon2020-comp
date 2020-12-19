@@ -36,7 +36,6 @@ pub fn get_field_data(
         return Err(format!("invalid status {}", result.status()));
     }
     let result = result.text().map_err(|e| e.to_string())?;
-    println!("text: {}", result);
     Ok(parse::parse_field_data(
         serde_json::from_str(&*result).map_err(|e| e.to_string())?,
         match_data.final_turn as u8,
@@ -49,7 +48,6 @@ pub fn send_act(
     match_data: &parse::MatchData,
     cfg: &parse::Config,
 ) {
-    println!("{:?}", acts);
     let url = cfg.url.clone() + &*format!("/matches/{}/action", match_data.match_id);
     let client = reqwest::blocking::Client::new();
 
@@ -75,8 +73,6 @@ pub fn send_act(
             .join(",")
         + "]}";
 
-    println!("str:{}", act_str);
-
     let result = client
         .post(&url)
         .header("x-api-token", cfg.token.clone())
@@ -95,4 +91,5 @@ pub fn send_act(
         }
         Err(ok) => println!("ERROR: {}", ok),
     }
+    println!();
 }
