@@ -230,6 +230,30 @@ pub struct Params {
 impl Params {
     pub fn default() -> Params {
         Params {
+            PER: 0.61,
+            FIRST_MOVE_BONUS: 1.10,
+
+            AG_CONF_PER: 0.58,
+            REGION_PER: 0.50,
+            REGION_POW: 0.85,
+            PUT_CONF_POW: 0.75,
+
+            SA_LAST_PENA: 0.5,
+            SA_LAST_POW: 4.8,
+            SA_LAST_SUPER_PENA: 2.2,
+            SA_LAST_SUPER_BORDER: 0.45,
+            SA_CONF_PER: 0.7,
+            SA_CONF_PENA: 1.15,
+            SA_DIST_PENA: 27.0,
+            SA_DIST_POW: 0.6,
+
+            LCP_PER: 2.0,
+            LCP_POW: 2.0,
+            SAME_TILE_PER: 1.0,
+            SAME_TILE_POW: 2.0,
+        }
+        /*
+        Params {
             PER: 0.6,
             FIRST_MOVE_BONUS: 1.0,
 
@@ -252,6 +276,7 @@ impl Params {
             SAME_TILE_PER: 1.0,
             SAME_TILE_POW: 2.0,
         }
+        */
     }
 }
 

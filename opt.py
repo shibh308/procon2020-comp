@@ -34,9 +34,9 @@ def main():
         d = json.load(f)
 
     study = optuna.create_study(study_name="opt_study", direction="maximize", storage="sqlite:///./opt_study.db", load_if_exists="True")
-    print(study.best_value, study.best_params)
 
     Parallel(n_jobs=12)([delayed(run)() for _ in range(12)])
+    print(study.best_value, study.best_params)
 
 if __name__ == '__main__':
     main()
