@@ -149,7 +149,11 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
                                         1
                                     };
                                 data.team_data = Some(res.teams[data.team_data_idx].clone());
-                                data.simulator.set_field(&res.field);
+                                if &res.field != data.simulator.get_field() {
+                                    println!("field updated\n");
+                                    data.simulator.set_field(&res.field);
+                                    data.simulator.reset_acts();
+                                }
                             }
                             Err(res) => println!("ERROR: {}", res),
                         }

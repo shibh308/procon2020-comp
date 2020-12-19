@@ -61,6 +61,9 @@ impl Simulator {
     pub fn get_acts(&self, side: usize) -> Vec<Act> {
         self.acts[side as usize].clone()
     }
+    pub fn reset_acts(&mut self) {
+        self.acts = vec![vec![Act::StayAct; self.field.agent_count()]; 2];
+    }
     pub fn set_act(&mut self, side: bool, id: usize, act: Act) {
         self.acts[side as usize][id] = act;
         self.act_flag[side as usize] = true;
