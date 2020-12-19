@@ -52,6 +52,9 @@ impl Simulator {
     pub fn get_mut_field(&mut self) -> &mut field::Field {
         &mut self.field
     }
+    pub fn set_field(&mut self, field: &field::Field) {
+        self.field = field.clone();
+    }
     pub fn get_act(&self, side: bool, id: usize) -> Act {
         self.acts[side as usize][id].clone()
     }

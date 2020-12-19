@@ -75,6 +75,8 @@ enum ClickedElement {
 pub struct AppData {
     pub simulator: simulator::Simulator,
     pub config: parse::Config,
+    pub match_data: Option<parse::MatchData>,
+    pub team_data: Option<parse::TeamData>,
 }
 
 macro_rules! make_button {
@@ -112,9 +114,35 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
             druid::widget::Button::new("MatchData").on_click(
                 move |_ctx, data: &mut AppData, _env| match request::get_match_data(&data.config) {
                     Ok(res) => {
-                        println!("{:?}", res);
+                        assert_eq!(res.len(), 1);
+                        println!("{:?}", res[0]);
+                        data.match_data = Some(res[0].clone());
                     }
-                    Err(res) => panic!(res),
+                    Err(res) => println!("ERROR: {}", res),
+                },
+            ),
+            1.0,
+        );
+        flex.add_spacer(10.);
+        flex.add_flex_child(
+            druid::widget::Button::new("FieldData").on_click(
+                move |_ctx, data: &mut AppData, _env| {
+                    if let Some(match_data) = &data.match_data {
+                        match request::get_field_data(&match_data, &data.config) {
+                            Ok(res) => {
+                                data.team_data =
+                                    Some(if res.teams[0].team_id as usize == data.config.id {
+                                        res.teams[0].clone()
+                                    } else {
+                                        res.teams[1].clone()
+                                    });
+                                data.simulator.set_field(&res.field);
+                            }
+                            Err(res) => println!("ERROR: {}", res),
+                        }
+                    } else {
+                        println!("match_data is none");
+                    }
                 },
             ),
             1.0,

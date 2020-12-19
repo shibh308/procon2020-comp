@@ -12,6 +12,8 @@ fn main() {
     let data = visualizer::AppData {
         simulator: simulator::Simulator::new(field::Field::new(None, None, None)),
         config: parse::read_config_json("./data/config.json"),
+        match_data: None,
+        team_data: None,
     };
 
     AppLauncher::with_window(main_window)

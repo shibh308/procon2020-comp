@@ -14,16 +14,18 @@ fn to_result<T: Clone>(opt: Option<T>, target: &str) -> Result<T, String> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Data)]
 pub struct TeamData {
     pub team_id: u32,
+    #[data(same_fn = "PartialEq::eq")]
     pub agent_id: Vec<u32>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Data)]
 pub struct MatchData {
     pub match_id: u32,
     pub final_turn: u32,
+    #[data(same_fn = "PartialEq::eq")]
     pub teams: Vec<TeamData>,
 }
 
@@ -87,20 +89,24 @@ where
 }
 
 fn get_team_data(teams: &Vec<Value>) -> Result<Vec<TeamData>, String> {
+    println!("teams: {:?}", teams);
     let team_data = (0..2)
         .map(|i| {
             let id = to_result(teams[i]["teamID"].as_u64(), &format!("teams[{}].teamID", i));
             let id = err_ret!(id);
             let agents = to_result(
-                teams[i]["agentID"].as_array(),
-                &format!("teams[{}].agentID", i),
+                teams[i]["agents"].as_array(),
+                &format!("teams[{}].agents", i),
             );
-            let agent_id = agents
-                .iter()
-                .enumerate()
-                .map(|(idx, dat)| to_result(dat[idx]["agentID"].as_u64(), "agentID"))
-                .collect::<Vec<_>>();
-            let agent_id = err_ret_vec!(agent_id).iter().map(|x| *x as u32).collect();
+            let agent_id = if let Ok(agents) = agents {
+                let agent_id = agents
+                    .iter()
+                    .map(|dat| to_result(dat["agentID"].as_u64(), "agentID"))
+                    .collect::<Vec<_>>();
+                err_ret_vec!(agent_id).iter().map(|x| *x as u32).collect()
+            } else {
+                Vec::new()
+            };
 
             Ok(TeamData {
                 team_id: id as u32,
@@ -139,16 +145,16 @@ pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String>
     let agent_data = (0..2)
         .map(|i| {
             let agents = to_result(
-                teams[i]["agentID"].as_array(),
-                &format!("teams[{}].agentID", i),
-            );
+                teams[i]["agents"].as_array(),
+                &format!("teams[{}][agents]", i),
+            )?;
             let agent_pos = agents
                 .iter()
                 .enumerate()
                 .map(|(idx, dat)| {
-                    let x = to_result(dat[idx]["x"].as_u64(), "x");
+                    let x = to_result(dat["x"].as_u64(), "x");
                     let x = err_ret!(x) as i8 - 1;
-                    let y = to_result(dat[idx]["y"].as_u64(), "y");
+                    let y = to_result(dat["y"].as_u64(), "y");
                     let y = err_ret!(y) as i8 - 1;
                     if x == -1 {
                         Ok(None)
@@ -161,6 +167,7 @@ pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String>
         })
         .collect::<Vec<_>>();
     let agent_data = err_ret_vec!(agent_data);
+    println!("dat:{:?}", agent_data);
 
     let team_data = get_team_data(teams)?;
 
