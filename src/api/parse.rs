@@ -202,8 +202,63 @@ pub fn read_config_json(path: &str) -> Config {
     res
 }
 
-pub struct Params {}
+#[derive(Deserialize)]
+pub struct Params {
+    pub PER: f64,
+    pub FIRST_MOVE_BONUS: f64,
+    pub PUT_BORDER: f64,
+
+    pub AG_CONF_PER: f64,
+    pub REGION_PER: f64,
+    pub REGION_POW: f64,
+    pub PUT_CONF_POW: f64,
+
+    pub SA_LAST_PENA: f64,
+    pub SA_LAST_POW: f64,
+    pub SA_LAST_SUPER_PENA: f64,
+    pub SA_LAST_SUPER_BORDER: f64,
+    pub SA_CONF_PER: f64,
+    pub SA_CONF_PENA: f64,
+    pub SA_DIST_PENA: f64,
+    pub SA_DIST_POW: f64,
+
+    pub LCP_PER: f64,
+    pub LCP_POW: f64,
+    pub SAME_TILE_PER: f64,
+    pub SAME_TILE_POW: f64,
+}
+
+impl Params {
+    pub fn default() -> Params {
+        Params {
+            PER: 0.6,
+            FIRST_MOVE_BONUS: 1.0,
+            PUT_BORDER: 0.3,
+
+            AG_CONF_PER: 0.3,
+            REGION_PER: 1.0,
+            REGION_POW: 0.9,
+            PUT_CONF_POW: 0.7,
+
+            SA_LAST_PENA: 0.3,
+            SA_LAST_POW: 3.5,
+            SA_LAST_SUPER_PENA: 2.5,
+            SA_LAST_SUPER_BORDER: 0.25,
+            SA_CONF_PER: 0.6,
+            SA_CONF_PENA: 3.5,
+            SA_DIST_PENA: 30.0,
+            SA_DIST_POW: 0.4,
+
+            LCP_PER: 2.0,
+            LCP_POW: 2.0,
+            SAME_TILE_PER: 1.0,
+            SAME_TILE_POW: 2.0,
+        }
+    }
+}
 
 pub fn read_params(path: &str) -> Params {
-    Params {}
+    let fp = File::open(path).expect("file not found");
+    let res = serde_json::from_reader(fp).expect("params parse error");
+    res
 }

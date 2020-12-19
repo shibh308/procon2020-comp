@@ -3,7 +3,7 @@ use crate::api::parse::Params;
 use crate::field;
 use crate::simulator;
 
-const CNT: usize = 10;
+const CNT: usize = 5;
 
 pub fn simulate(params: Params) {
     let mut diff_sum = 0;
