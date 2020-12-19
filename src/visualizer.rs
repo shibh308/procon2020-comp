@@ -77,6 +77,7 @@ pub struct AppData {
     pub config: parse::Config,
     pub match_data: Option<parse::MatchData>,
     pub team_data: Option<parse::TeamData>,
+    pub team_data_idx: usize,
 }
 
 macro_rules! make_button {
@@ -92,6 +93,17 @@ macro_rules! make_button {
                     let res = solver.solve();
                     for id in 0..field.agent_count() {
                         data.simulator.set_act(side, id, res[id].clone());
+                    }
+                    let acts = data.simulator.get_acts(data.team_data_idx);
+                    if data.team_data.is_none() || data.match_data.is_none() {
+                        println!("team_data / match_data is none")
+                    } else {
+                        request::send_act(
+                            acts,
+                            &data.team_data.as_ref().unwrap(),
+                            &data.match_data.as_ref().unwrap(),
+                            &data.config,
+                        );
                     }
                 }),
                 1.0,
@@ -130,12 +142,13 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
                     if let Some(match_data) = &data.match_data {
                         match request::get_field_data(&match_data, &data.config) {
                             Ok(res) => {
-                                data.team_data =
-                                    Some(if res.teams[0].team_id as usize == data.config.id {
-                                        res.teams[0].clone()
+                                data.team_data_idx =
+                                    if res.teams[0].team_id as usize == data.config.id {
+                                        0
                                     } else {
-                                        res.teams[1].clone()
-                                    });
+                                        1
+                                    };
+                                data.team_data = Some(res.teams[data.team_data_idx].clone());
                                 data.simulator.set_field(&res.field);
                             }
                             Err(res) => println!("ERROR: {}", res),
@@ -147,7 +160,6 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
             ),
             1.0,
         );
-        flex.add_spacer(10.);
     }
     flex.padding(10.).center()
 }

@@ -2,7 +2,7 @@ use crate::field;
 use druid::Data;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Act {
     StayAct,
     PutAct(field::Point),
@@ -57,6 +57,9 @@ impl Simulator {
     }
     pub fn get_act(&self, side: bool, id: usize) -> Act {
         self.acts[side as usize][id].clone()
+    }
+    pub fn get_acts(&self, side: usize) -> Vec<Act> {
+        self.acts[side as usize].clone()
     }
     pub fn set_act(&mut self, side: bool, id: usize, act: Act) {
         self.acts[side as usize][id] = act;

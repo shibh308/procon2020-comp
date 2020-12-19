@@ -139,6 +139,7 @@ pub fn parse_matches_data(val: Value) -> Result<Vec<MatchData>, String> {
 pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String> {
     let width = to_result(val["width"].as_u64(), "width")? as usize;
     let height = to_result(val["height"].as_u64(), "height")? as usize;
+    let (width, height) = (height, width);
     let now_turn = to_result(val["turn"].as_u64(), "turn")? as u8;
     let teams = to_result(val["teams"].as_array(), "teams")?;
 
@@ -167,7 +168,6 @@ pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String>
         })
         .collect::<Vec<_>>();
     let agent_data = err_ret_vec!(agent_data);
-    println!("dat:{:?}", agent_data);
 
     let team_data = get_team_data(teams)?;
 
@@ -191,7 +191,7 @@ pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String>
 }
 
 pub fn read_config_json(path: &str) -> Config {
-    let mut fp = File::open(path).expect("file not found");
+    let fp = File::open(path).expect("file not found");
     let res = serde_json::from_reader(fp).expect("config parse error");
     println!("{:?}", res);
     res

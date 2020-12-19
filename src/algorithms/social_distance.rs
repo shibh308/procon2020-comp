@@ -21,10 +21,6 @@ const FIRST_MOVE_BONUS: f64 = 1.0;
 
 const PUT_BORDER: f64 = 0.3;
 
-const PUT_START_TEMP: f64 = 3.0;
-const PUT_END_TEMP: f64 = 0.3;
-const PUT_SA_SEC: f64 = 0.3;
-
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
 const SA_SEC: f64 = 0.3;
@@ -59,15 +55,6 @@ pub struct SocialDistance<'a> {
 enum SaRes {
     Normal(Vec<Vec<(f64, Act, Vec<Point>)>>),
     Put((Vec<(f64, Act, Vec<Point>)>, Vec<(f64, Act, Vec<Point>)>)),
-}
-
-impl SaRes {
-    fn len(self) -> usize {
-        match self {
-            SaRes::Normal(x) => x.len(),
-            SaRes::Put((x, _)) => x.len(),
-        }
-    }
 }
 
 impl<'a> base::Solver<'a> for SocialDistance<'a> {

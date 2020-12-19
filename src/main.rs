@@ -14,6 +14,7 @@ fn main() {
         config: parse::read_config_json("./data/config.json"),
         match_data: None,
         team_data: None,
+        team_data_idx: 0,
     };
 
     AppLauncher::with_window(main_window)
