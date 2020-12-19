@@ -202,11 +202,10 @@ pub fn read_config_json(path: &str) -> Config {
     res
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Params {
     pub PER: f64,
     pub FIRST_MOVE_BONUS: f64,
-    pub PUT_BORDER: f64,
 
     pub AG_CONF_PER: f64,
     pub REGION_PER: f64,
@@ -233,7 +232,6 @@ impl Params {
         Params {
             PER: 0.6,
             FIRST_MOVE_BONUS: 1.0,
-            PUT_BORDER: 0.3,
 
             AG_CONF_PER: 0.3,
             REGION_PER: 1.0,

@@ -20,11 +20,11 @@ const PUT_WIDTH: usize = 60;
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
 const SA_SEC: f64 = 0.3;
+const PUT_BORDER: f64 = 1.0;
 
 /*
 const PER: f64 = 0.6;
 const FIRST_MOVE_BONUS: f64 = 1.0;
-const PUT_BORDER: f64 = 0.3;
 
 const AG_CONF_PER: f64 = 0.3;
 const REGION_PER: f64 = 1.0;
@@ -56,6 +56,12 @@ pub struct SocialDistance<'a> {
 enum SaRes {
     Normal(Vec<Vec<(f64, Act, Vec<Point>)>>),
     Put((Vec<(f64, Act, Vec<Point>)>, Vec<(f64, Act, Vec<Point>)>)),
+}
+
+impl SocialDistance<'_> {
+    pub fn set_params(&mut self, params: Params) {
+        self.params = params;
+    }
 }
 
 impl<'a> base::Solver<'a> for SocialDistance<'a> {
@@ -502,8 +508,7 @@ impl SocialDistance<'_> {
                 res_f.sort();
                 res_f.iter().map(|x| x.raw()).collect::<Vec<_>>()
             };
-            let border =
-                res[((res.len() as f64 * self.params.PUT_BORDER) as usize).min(res.len() - 1)];
+            let border = res[((res.len() as f64 * PUT_BORDER) as usize).min(res.len() - 1)];
             (
                 (0..self.field.width()).fold(HashSet::new(), |v, i| {
                     let mut w = (0..self.field.height()).fold(HashSet::new(), |mut u, j| {
