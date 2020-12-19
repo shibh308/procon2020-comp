@@ -148,7 +148,7 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
                     if let Some(match_data) = &data.match_data {
                         match request::get_field_data(&match_data, &data.config) {
                             Ok(res) => {
-                                if &res.field != data.simulator.get_field() {
+                                if res.field.now_turn() != data.simulator.get_field().now_turn() {
                                     println!("field updated");
                                     data.team_data_idx =
                                         if res.teams[0].team_id as usize == data.config.id {
@@ -178,6 +178,7 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
                                             &data.match_data.as_ref().unwrap(),
                                             &data.config,
                                         );
+                                        println!("send end")
                                     }
                                 }
                             }

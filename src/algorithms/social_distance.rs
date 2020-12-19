@@ -14,12 +14,12 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Instant;
 
 const DEPTH: usize = 5;
-const WIDTH: usize = 30;
-const PUT_WIDTH: usize = 60;
+const WIDTH: usize = 10;
+const PUT_WIDTH: usize = 20;
 
 const START_TEMP: f64 = 3.0;
 const END_TEMP: f64 = 0.3;
-const SA_SEC: f64 = 0.3;
+const SA_SEC: f64 = 0.1;
 const PUT_BORDER: f64 = 1.0;
 
 /*
@@ -162,7 +162,6 @@ impl SocialDistance<'_> {
             .collect::<Vec<_>>();
 
         let mut field = self.field.clone();
-        let init_region = field.score(self.side).region();
 
         let mut per_map = HashMap::new();
         let mut prev_per = vec![1.0; pos_data.len()];
@@ -188,18 +187,7 @@ impl SocialDistance<'_> {
                 }
             }
 
-            for pos in poses {
-                field.set_state(pos.usize(), State::Wall(self.side))
-            }
-            field.update_score();
-            field.update_region();
-            let region_diff = field.score(self.side).region() - init_region;
-            let region_score = self.params.REGION_PER
-                * self.params.REGION_POW.powf((j - 1) as f64)
-                * region_diff as f64;
-            score += region_score;
             if output {
-                println!("region: {} {}", region_diff, region_score);
                 println!("{}", score);
             }
 

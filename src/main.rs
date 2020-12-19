@@ -8,13 +8,14 @@ use procon31_comp::simulator;
 use procon31_comp::visualizer;
 
 fn main() {
-    let data = visualizer::AppData {
+    let mut data = visualizer::AppData {
         simulator: simulator::Simulator::new(field::Field::new(None, None, None)),
         config: parse::read_config_json("./data/config.json"),
         match_data: None,
         team_data: None,
         team_data_idx: 0,
     };
+    data.simulator.inc_turn();
 
     if data.config.visualizer {
         let main_window = WindowDesc::new(visualizer::ui_builder);

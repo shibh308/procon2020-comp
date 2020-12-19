@@ -338,6 +338,10 @@ impl Field {
                         Point::new(0, -1),
                         Point::new(1, 0),
                         Point::new(-1, 0),
+                        Point::new(1, 1),
+                        Point::new(1, -1),
+                        Point::new(-1, 1),
+                        Point::new(-1, -1),
                     ] {
                         if !self.inside(top.normal() + diff) {
                             out_flag = true;

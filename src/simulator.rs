@@ -68,6 +68,9 @@ impl Simulator {
         self.acts[side as usize][id] = act;
         self.act_flag[side as usize] = true;
     }
+    pub fn inc_turn(&mut self) {
+        self.field.update_turn();
+    }
     pub fn change_turn(&mut self) {
         if self.field.now_turn() == self.field.final_turn()
             || !self.act_flag[0]

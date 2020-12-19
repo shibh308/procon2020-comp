@@ -231,10 +231,10 @@ impl Params {
     pub fn default() -> Params {
         Params {
             PER: 0.61,
-            FIRST_MOVE_BONUS: 1.25,
+            FIRST_MOVE_BONUS: 1.75,
 
             AG_CONF_PER: 0.58,
-            REGION_PER: 0.50,
+            REGION_PER: 0.00,
             REGION_POW: 0.85,
             PUT_CONF_POW: 0.75,
 
@@ -244,7 +244,7 @@ impl Params {
             SA_LAST_SUPER_BORDER: 0.50,
             SA_CONF_PER: 0.5,
             SA_CONF_PENA: 1.15,
-            SA_DIST_PENA: 27.0,
+            SA_DIST_PENA: 50.0,
             SA_DIST_POW: 0.7,
 
             LCP_PER: 0.95,
