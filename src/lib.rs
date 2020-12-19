@@ -4,3 +4,4 @@ pub mod visualizer;
 
 pub mod algorithms;
 pub mod api;
+pub mod manager;

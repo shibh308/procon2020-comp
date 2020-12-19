@@ -39,6 +39,7 @@ pub struct Config {
     pub id: usize,
     pub token: String,
     pub url: String,
+    pub visualizer: bool,
 }
 
 macro_rules! err_ret {
@@ -199,4 +200,10 @@ pub fn read_config_json(path: &str) -> Config {
     let fp = File::open(path).expect("file not found");
     let res = serde_json::from_reader(fp).expect("config parse error");
     res
+}
+
+pub struct Params {}
+
+pub fn read_params(path: &str) -> Params {
+    Params {}
 }

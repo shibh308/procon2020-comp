@@ -76,7 +76,8 @@ impl Simulator {
         let act_vec = act_list(&self.acts, &self.field);
         for (side, id, act) in act_vec {
             match act {
-                Act::PutAct(nex_pos) | Act::MoveAct(nex_pos) => {
+                Act::PutAct(nex_pos) => self.field.set_agent(side, id, Some(nex_pos)),
+                Act::MoveAct(nex_pos) => {
                     self.field.set_agent(side, id, Some(nex_pos));
                     self.field
                         .set_state(nex_pos.usize(), field::State::Wall(side));
