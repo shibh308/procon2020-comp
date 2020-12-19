@@ -85,7 +85,14 @@ where
             Ok(err_ret_vec!(u))
         })
         .collect::<Vec<_>>();
-    Ok(err_ret_vec!(res))
+    let r: Vec<Vec<T>> = err_ret_vec!(res);
+    let mut v: Vec<Vec<T>> = vec![vec![r[0][0].clone(); r.len()]; r[0].len()];
+    for i in 0..r.len() {
+        for j in 0..r[i].len() {
+            v[j][i] = r[i][j].clone();
+        }
+    }
+    Ok(v)
 }
 
 fn get_team_data(teams: &Vec<Value>) -> Result<Vec<TeamData>, String> {
@@ -138,7 +145,6 @@ pub fn parse_matches_data(val: Value) -> Result<Vec<MatchData>, String> {
 pub fn parse_field_data(val: Value, final_turn: u8) -> Result<FieldData, String> {
     let width = to_result(val["width"].as_u64(), "width")? as usize;
     let height = to_result(val["height"].as_u64(), "height")? as usize;
-    let (width, height) = (height, width);
     let now_turn = to_result(val["turn"].as_u64(), "turn")? as u8;
     let teams = to_result(val["teams"].as_array(), "teams")?;
 
