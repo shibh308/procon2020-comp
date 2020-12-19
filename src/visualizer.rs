@@ -129,6 +129,12 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
                         assert_eq!(res.len(), 1);
                         println!("{:?}", res[0]);
                         data.match_data = Some(res[0].clone());
+                        data.team_data_idx = if res[0].teams[0].team_id as usize == data.config.id {
+                            0
+                        } else {
+                            1
+                        };
+                        println!("side: {}", data.team_data_idx);
                     }
                     Err(res) => println!("ERROR: {}", res),
                 },
@@ -142,17 +148,37 @@ fn make_side_ui(side: bool) -> impl Widget<AppData> {
                     if let Some(match_data) = &data.match_data {
                         match request::get_field_data(&match_data, &data.config) {
                             Ok(res) => {
-                                data.team_data_idx =
-                                    if res.teams[0].team_id as usize == data.config.id {
-                                        0
-                                    } else {
-                                        1
-                                    };
-                                data.team_data = Some(res.teams[data.team_data_idx].clone());
                                 if &res.field != data.simulator.get_field() {
-                                    println!("field updated\n");
+                                    println!("field updated");
+                                    data.team_data_idx =
+                                        if res.teams[0].team_id as usize == data.config.id {
+                                            0
+                                        } else {
+                                            1
+                                        };
+                                    data.team_data = Some(res.teams[data.team_data_idx].clone());
+                                    println!("side: {}", data.team_data_idx);
                                     data.simulator.set_field(&res.field);
                                     data.simulator.reset_acts();
+
+                                    let side = data.team_data_idx == 1;
+                                    let field: &field::Field = data.simulator.get_field();
+                                    let mut solver = algorithms::SocialDistance::new(side, field);
+                                    let res = solver.solve();
+                                    for id in 0..field.agent_count() {
+                                        data.simulator.set_act(side, id, res[id].clone());
+                                    }
+                                    let acts = data.simulator.get_acts(data.team_data_idx);
+                                    if data.team_data.is_none() || data.match_data.is_none() {
+                                        println!("team_data / match_data is none")
+                                    } else {
+                                        request::send_act(
+                                            acts,
+                                            &data.team_data.as_ref().unwrap(),
+                                            &data.match_data.as_ref().unwrap(),
+                                            &data.config,
+                                        );
+                                    }
                                 }
                             }
                             Err(res) => println!("ERROR: {}", res),
@@ -278,12 +304,12 @@ impl GameWidget {
     fn event_set_act(
         &mut self,
         e: &MouseEvent,
-        simulator: &mut Simulator,
+        data: &mut AppData,
         side: bool,
         id: usize,
         tile_pos: field::Point,
     ) {
-        let op_agent_pos = simulator.get_field().agent(side, id);
+        let op_agent_pos = data.simulator.get_field().agent(side, id);
         let op_state = match op_agent_pos {
             Some(agent_pos) => match e.button {
                 MouseButton::Left | MouseButton::Right => {
@@ -303,7 +329,13 @@ impl GameWidget {
         };
 
         if op_state.is_some() {
-            simulator.set_act(side, id, op_state.unwrap());
+            data.simulator.set_act(side, id, op_state.unwrap());
+            request::send_act(
+                data.simulator.get_acts(side as usize),
+                &data.team_data.as_ref().unwrap(),
+                &data.match_data.as_ref().unwrap(),
+                &data.config,
+            );
         }
         self.selected = None;
     }
@@ -315,19 +347,13 @@ impl Widget<AppData> for GameWidget {
             Event::MouseDown(e) => match self.clicked_element(e.pos, &data.simulator.get_field()) {
                 Some(ClickedElement::Tile(tile_pos)) => {
                     if let Some((side, id)) = self.selected {
-                        self.event_set_act(e, &mut data.simulator, side, id, tile_pos);
+                        self.event_set_act(e, data, side, id, tile_pos);
                     }
                 }
                 Some(ClickedElement::Agent((side, id))) => match self.selected {
                     Some((selected_side, selected_id)) => {
                         if let Some(tile_pos) = data.simulator.get_field().agent(side, id) {
-                            self.event_set_act(
-                                e,
-                                &mut data.simulator,
-                                selected_side,
-                                selected_id,
-                                tile_pos,
-                            );
+                            self.event_set_act(e, data, selected_side, selected_id, tile_pos);
                         }
                     }
                     None => {
