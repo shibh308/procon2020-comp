@@ -265,13 +265,12 @@ impl SocialDistance<'_> {
             .map(|_| vec![1.0; self.field.height()])
             .collect::<Vec<_>>();
 
-        let bonus_score = poses
-            .iter()
-            .fold(0.0, |b, x| b + self.field.tile(x[1].usize()).point() as f64)
-            * FIRST_MOVE_BONUS;
-
         for j in 0..DEPTH {
-            let per_pow = SA_CONF_PER.powf(j as f64);
+            let per_pow = if j == 0 {
+                0.0
+            } else {
+                SA_CONF_PER.powf(j as f64)
+            };
             for (i, pd) in poses.iter().enumerate() {
                 let pos = pd[j].usize();
                 // 到達確率
@@ -292,8 +291,7 @@ impl SocialDistance<'_> {
         let res = prob
             .iter()
             .enumerate()
-            .fold(0.0, |b, (idx, x)| b + scores[idx] * x)
-            + bonus_score;
+            .fold(0.0, |b, (idx, x)| b + scores[idx] * x);
 
         if output {
             println!("{:?}", prob);
